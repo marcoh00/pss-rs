@@ -5,7 +5,6 @@ use sha3::Digest;
 
 const DH_MODP_2048_MODULUS_HEX: &str = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
 impl_modulus!(DhModp2048Modulus, U2048, DH_MODP_2048_MODULUS_HEX);
-const DH_MODP_2048_MODULUS: NonZero<U2048> = NonZero::<U2048>::const_new(U2048::from_be_hex(DH_MODP_2048_MODULUS_HEX)).0;
 const DH_MODP_2048_GENERATOR: U2048 = U2048::from_u8(2);
 const DH_MODP_2048: Residue<DhModp2048Modulus, { U2048::LIMBS }> = const_residue!(DH_MODP_2048_GENERATOR, DhModp2048Modulus);
 
@@ -14,9 +13,10 @@ impl_modulus!(DhTinyTestInsecureModulus, U64, DH_TINY_TEST_INSECURE_MODULUS_HEX)
 const DH_TINY_TEST_INSECURE_GENERATOR: U64 = U64::from_u8(3);
 const DH_TINY_TEST: Residue<DhTinyTestInsecureModulus, { U64::LIMBS }> = const_residue!(DH_TINY_TEST_INSECURE_GENERATOR, DhTinyTestInsecureModulus);
 
+#[derive(Debug)]
 pub struct Dpk<const LIMBS: usize, MOD: ResidueParams<LIMBS>>(Residue<MOD, LIMBS>);
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct Dsnym<const LIMBS: usize, MOD: ResidueParams<LIMBS>>(Residue<MOD, LIMBS>);
 
 impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> core::hash::Hash for Dsnym<LIMBS, MOD> {
@@ -71,6 +71,7 @@ where Uint<LIMBS>: Encoding {
     }
 }
 
+#[derive(Debug)]
 pub struct NymSecretKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding {
     x1: Uint<LIMBS>,
@@ -95,6 +96,8 @@ where Uint<LIMBS>: Encoding {
         let t2 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
         let a1 = group.g1.pow(&t1).mul(&group.g2.pow(&t2)).retrieve();
         let a2 = dpk.0.pow(&t1).retrieve();
+
+        println!("t1={:?}, t2={:?}, a1=g1^t1*g2^t2={:?}, dpk={:?}, a2=dpk^t1={:?}", t1, t2, a1, dpk.0.retrieve(), a2);
         
         let mut c_input: Vec<u8> = Vec::with_capacity(U2048::BYTES * 4 + m.len());
         c_input.extend(dpk.0.retrieve().to_be_bytes().as_ref());
@@ -120,19 +123,28 @@ where Uint<LIMBS>: Encoding {
         let c_num = Uint::<LIMBS>::from_be_slice(&c_num_bytes);
         let c_residue = Residue::new(&c_num);
 
+        println!("c_num={:?}, c_residue={:?}", c_num, c_residue.retrieve());
+
         let s1 = t1_residue.sub(&c_residue.mul(&x1_residue)).retrieve();
         let s2 = t2_residue.sub(&c_residue.mul(&x2_residue)).retrieve();
+
+        println!("x1={:?}, x1_residue={:?}, x2={:?}, x2_residue={:?}, t1_residue={:?}, t2_residue={:?}", self.x1, x1_residue.retrieve(), self.x2, x2_residue.retrieve(), t1_residue.retrieve(), t2_residue.retrieve());
+        println!("s1=t1-c*x1={:?}, s2=t2-c*x2={:?}", s1, s2);
 
         PssSignature::new(c, s1, s2)
 
     }
 
     pub fn valid_for_group(&self, group: &GroupManagerPublicParameters<LIMBS, MOD>) -> bool {
-        let y_self = group.g1.pow(&self.x1).mul(&group.g2.pow(&self.x2)).retrieve();
+        let part1 = group.g1.pow(&self.x1);
+        let part2 = group.g2.pow(&self.x2);
+        let y_self = part1.mul(&part2).retrieve();
+        println!("g1 = {:?}, g2 = {:?}, g1^x1 = {:?}, g2^x2 = {:?}, g1^x1*g2^x2 = {:?}", group.g1.retrieve(), group.g2.retrieve(), part1.retrieve(), part2.retrieve(), y_self);
         y_self == group.gpk.retrieve()
     }
 }
 
+#[derive(Debug)]
 pub struct GroupManagerSecretKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding {
     z: Uint<LIMBS>,
@@ -141,6 +153,7 @@ where Uint<LIMBS>: Encoding {
     _mod: PhantomData<MOD>
 }
 
+#[derive(Debug)]
 pub struct GroupManagerPublicParameters<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
     g1: Residue<MOD, LIMBS>,
     g2: Residue<MOD, LIMBS>,
@@ -158,6 +171,7 @@ where Uint<LIMBS>: Encoding {
     pub fn params(&self) -> GroupManagerPublicParameters<LIMBS, MOD> {
         let g2 = self.g.pow(&self.z);
         let gpk = self.g.pow(&self.x);
+        println!("z={:?}, x={:?}, g={:?}, gpk/g^x={:?}", self.z, self.x, self.g.retrieve(), gpk.retrieve());
         GroupManagerPublicParameters {
             g1: self.g.clone(), g2, gpk
         }
@@ -186,10 +200,15 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let group_manager = GroupManagerSecretKey::new(DH_MODP_2048);
+        let group_manager = GroupManagerSecretKey::new(DH_TINY_TEST);
         let group_params = group_manager.params();
         let domain = group_manager.new_dpk();
         let user = group_manager.new_gsk();
+
+        println!("Group Manager: {:?}", group_manager);
+        println!("Group Params: {:?}", group_params);
+        println!("Domain: {:?}", domain);
+        println!("User: {:?}", user);
 
         println!("Valid key? {}", user.valid_for_group(&group_params));
 
