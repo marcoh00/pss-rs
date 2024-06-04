@@ -1,7 +1,7 @@
 use crypto_bigint::{generic_array::{sequence::GenericSequence, GenericArray}, rand_core::OsRng};
-use p256::{elliptic_curve::{hash2curve::FromOkm, sec1::ToEncodedPoint, ScalarPrimitive}, AffinePoint, PublicKey, Scalar, SecretKey};
+use k256::{elliptic_curve::{hash2curve::FromOkm, sec1::ToEncodedPoint, ScalarPrimitive}, AffinePoint, PublicKey, Scalar, SecretKey};
 use sha3::{digest::OutputSizeUser, Digest};
-use std::ops::{Mul, Sub};
+use std::ops::{Add, Mul, Sub};
 
 const ID_DSI: &[u8] = b"TODO replace with algorithm id";
 
@@ -69,25 +69,25 @@ impl<'a> PssSigner<'a> {
         let k1 = SecretKey::random(&mut OsRng::default());
         let k2 = SecretKey::random(&mut OsRng::default());
 
-        let q1_part = self.pk_m.to_projective().mul(Scalar::from(&k2));
+        let q1_part = self.pk_m.to_projective().mul(Scalar::from(k2.as_scalar_primitive()));
         let q1 = k1.public_key().to_projective().add(&q1_part).to_affine();
 
         let pk_sector_proj = self.pk_sector.to_projective();
 
         let pseudonym1 = match self.i_sector_icc_1 {
-            Some(ref pubkey) => Some((pk_sector_proj.mul(Scalar::from(&k1)).to_affine(), pubkey)),
+            Some(ref pubkey) => Some((pk_sector_proj.mul(Scalar::from(k1.as_scalar_primitive())).to_affine(), pubkey)),
             None => None
         };
         let pseudonym2 = match self.i_sector_icc_2 {
-            Some(ref pubkey) => Some((pk_sector_proj.mul(Scalar::from(&k2)).to_affine(), pubkey)),
+            Some(ref pubkey) => Some((pk_sector_proj.mul(Scalar::from(k2.as_scalar_primitive())).to_affine(), pubkey)),
             None => None
         };
 
         let c_bin = signature_hash(&q1, pseudonym1, pseudonym2, &self.pk_sector, message);
         let c: Scalar = hash2curve(&c_bin);
 
-        let s1 = Scalar::from(&k1).sub(c.multiply(&Scalar::from(self.sk_icc_1_u)));
-        let s2 = Scalar::from(&k2).sub(c.multiply(&Scalar::from(self.sk_icc_2_u)));
+        let s1 = Scalar::from(k1.as_scalar_primitive()).sub(c.mul(Scalar::from(self.sk_icc_1_u.as_scalar_primitive())));
+        let s2 = Scalar::from(k2.as_scalar_primitive()).sub(c.mul(Scalar::from(self.sk_icc_2_u.as_scalar_primitive())));
 
         PssSignature {
             c,
@@ -117,14 +117,14 @@ impl NymSecretKey {
 
     pub fn valid_for_gpk(&self, gpk: &GroupManagerPublicKey) -> bool {
         let pk_icc_1_u = self.sk_icc_1_u.public_key().to_projective();
-        let pk_icc_2_u = gpk.pk_m.to_projective().mul(Scalar::from(&self.sk_icc_2_u));
+        let pk_icc_2_u = gpk.pk_m.to_projective().mul(Scalar::from(self.sk_icc_2_u.as_scalar_primitive()));
         let result = pk_icc_1_u + pk_icc_2_u;
         &result.to_affine() == gpk.pk_icc.as_affine()
     }
 
     pub fn sector_identifiers(&self, pk_sector: &PublicKey) -> SectorSpecificIdentifiers {
-        let i_sector_icc_1 = PublicKey::from_affine(pk_sector.to_projective().mul(Scalar::from(&self.sk_icc_1_u)).to_affine()).unwrap();
-        let i_sector_icc_2 = PublicKey::from_affine(pk_sector.to_projective().mul(Scalar::from(&self.sk_icc_2_u)).to_affine()).unwrap();
+        let i_sector_icc_1 = PublicKey::from_affine(pk_sector.to_projective().mul(Scalar::from(self.sk_icc_1_u.as_scalar_primitive())).to_affine()).unwrap();
+        let i_sector_icc_2 = PublicKey::from_affine(pk_sector.to_projective().mul(Scalar::from(self.sk_icc_2_u.as_scalar_primitive())).to_affine()).unwrap();
         SectorSpecificIdentifiers::new(i_sector_icc_1, i_sector_icc_2)
     }
 
@@ -184,12 +184,12 @@ impl GroupManager {
 
     pub fn nym(&self) -> NymSecretKey {
         let sk_icc_2_u = SecretKey::random(&mut OsRng::default());
-        let sk_icc_2_u_scalar = Scalar::from(&sk_icc_2_u);
-        let sk_m_scalar = Scalar::from(&self.sk_m);
-        let sk_icc_scalar = Scalar::from(&self.sk_icc);
+        let sk_icc_2_u_scalar = Scalar::from(sk_icc_2_u.as_scalar_primitive());
+        let sk_m_scalar = Scalar::from(self.sk_m.as_scalar_primitive());
+        let sk_icc_scalar = Scalar::from(self.sk_icc.as_scalar_primitive());
 
         // SK_ICC_1 = SK_ICC - SK_M * SK_ICC_2
-        let multiplication = sk_m_scalar.multiply(&sk_icc_2_u_scalar);
+        let multiplication = sk_m_scalar.mul(&sk_icc_2_u_scalar);
         let sk_icc_1_u_scalar = sk_icc_scalar.sub(&multiplication);
         let sk_icc_1_u = SecretKey::new(ScalarPrimitive::from(&sk_icc_1_u_scalar));
         NymSecretKey::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
@@ -259,7 +259,7 @@ impl GroupManagerPublicKey {
 
 #[cfg(test)]
 mod tests {
-    use p256::Scalar;
+    use k256::Scalar;
 
     use crate::ecc::PssSignature;
 
