@@ -1,6 +1,6 @@
 use std::{collections::HashSet, marker::PhantomData};
 
-use crypto_bigint::{const_residue, impl_modulus, modular::{constant_mod::{Residue, ResidueParams}, Retrieve}, rand_core::OsRng, Encoding, NonZero, RandomMod, Uint, U2048, U64};
+use crypto_bigint::{const_residue, impl_modulus, modular::{constant_mod::{Residue, ResidueParams}, runtime_mod::DynResidue, Retrieve}, rand_core::OsRng, CheckedSub, ConcatMixed, Encoding, NonZero, RandomMod, SplitMixed, Uint, U2048, U64};
 use sha3::Digest;
 
 const DH_MODP_2048_MODULUS_HEX: &str = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
@@ -72,15 +72,15 @@ where Uint<LIMBS>: Encoding {
 }
 
 #[derive(Debug)]
-pub struct NymSecretKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>>
-where Uint<LIMBS>: Encoding {
+pub struct NymSecretKey<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>>
+where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     x1: Uint<LIMBS>,
     x2: Uint<LIMBS>,
     _mod: PhantomData<MOD>
 }
 
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> NymSecretKey<LIMBS, MOD>
-where Uint<LIMBS>: Encoding {
+impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> NymSecretKey<LIMBS, WIDE_LIMBS, MOD>
+where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     pub fn new(x1: Uint<LIMBS>, x2: Uint<LIMBS>) -> Self {
         Self {
             x1, x2, _mod: PhantomData
@@ -107,11 +107,6 @@ where Uint<LIMBS>: Encoding {
         c_input.extend(m);
         let c: [u8; 32] = sha3::Keccak256::digest(&c_input).as_slice().try_into().expect("invalid length");
 
-        let t1_residue = Residue::<MOD, LIMBS>::new(&t1);
-        let t2_residue = Residue::new(&t2);
-        let x1_residue = Residue::new(&self.x1);
-        let x2_residue = Residue::new(&self.x2);
-
         let mut c_num_bytes = Vec::with_capacity(Uint::<LIMBS>::BYTES);
         for i in 0..Uint::<LIMBS>::BYTES {
             if i < 32 {
@@ -121,14 +116,18 @@ where Uint<LIMBS>: Encoding {
             }
         }
         let c_num = Uint::<LIMBS>::from_be_slice(&c_num_bytes);
-        let c_residue = Residue::new(&c_num);
+        let c_residue = Residue::<MOD, LIMBS>::new(&c_num);
 
         println!("c_num={:?}, c_residue={:?}", c_num, c_residue.retrieve());
 
-        let s1 = t1_residue.sub(&c_residue.mul(&x1_residue)).retrieve();
-        let s2 = t2_residue.sub(&c_residue.mul(&x2_residue)).retrieve();
+        let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
+        let c_x1 = mul_mod(&c_num, &self.x1, &fermat_modulus);
+        let s1 = t1.sub_mod(&c_x1, &fermat_modulus);
 
-        println!("x1={:?}, x1_residue={:?}, x2={:?}, x2_residue={:?}, t1_residue={:?}, t2_residue={:?}", self.x1, x1_residue.retrieve(), self.x2, x2_residue.retrieve(), t1_residue.retrieve(), t2_residue.retrieve());
+        let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
+        let c_x2 = mul_mod(&c_num, &self.x2, &fermat_modulus);
+        let s2 = t2.sub_mod(&c_x2, &fermat_modulus);
+
         println!("s1=t1-c*x1={:?}, s2=t2-c*x2={:?}", s1, s2);
 
         PssSignature::new(c, s1, s2)
@@ -145,8 +144,8 @@ where Uint<LIMBS>: Encoding {
 }
 
 #[derive(Debug)]
-pub struct GroupManagerSecretKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>>
-where Uint<LIMBS>: Encoding {
+pub struct GroupManagerSecretKey<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>>
+where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     z: Uint<LIMBS>,
     x: Uint<LIMBS>,
     g: Residue<MOD, LIMBS>,
@@ -160,8 +159,8 @@ pub struct GroupManagerPublicParameters<const LIMBS: usize, MOD: ResidueParams<L
     gpk: Residue<MOD, LIMBS>
 }
 
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupManagerSecretKey<LIMBS, MOD>
-where Uint<LIMBS>: Encoding {
+impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupManagerSecretKey<LIMBS, WIDE_LIMBS, MOD>
+where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     pub fn new(g: Residue<MOD, LIMBS>) -> Self {
         let z = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
         let x = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
@@ -182,15 +181,23 @@ where Uint<LIMBS>: Encoding {
         Dpk(self.g.pow(&r))
     }
 
-    pub fn new_gsk(&self) -> NymSecretKey<LIMBS, MOD> {
+    pub fn new_gsk(&self) -> NymSecretKey<LIMBS, WIDE_LIMBS, MOD> {
         let x_2 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        let x_2_residue = Residue::<MOD, LIMBS>::new(&x_2);
-        let z_residue = Residue::new(&self.z);
-        let x_residue = Residue::new(&self.x);
-        let x_1 = x_residue.sub(&z_residue.mul(&x_2_residue)).sub(&Residue::new(&Uint::from_u8(1))).retrieve();
+        let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
+        let z_x2_mul = mul_mod(&self.z, &x_2, &fermat_modulus);
+        let x_1 = self.x.sub_mod(&z_x2_mul, &fermat_modulus);
+        println!("x2 = {}, mod-1 = {}, z*x2 = {}, x-z*x2 = {}", x_2, fermat_modulus, z_x2_mul, x_1);
         NymSecretKey::new(x_1, x_2)
     }
 
+}
+
+fn mul_mod<const LIMBS: usize, const WIDE_LIMBS: usize>(a: &Uint<LIMBS>, b: &Uint<LIMBS>, p: &Uint<LIMBS>) -> Uint<LIMBS>
+where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
+    let mul = a.mul(&b);
+    let wide_modulus = Uint::<LIMBS>::from_u8(0).concat_mixed(p);
+    let residue = mul.div_rem(&NonZero::from_uint(wide_modulus)).1;
+    residue.split_mixed().1
 }
 
 
