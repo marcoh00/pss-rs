@@ -102,13 +102,13 @@ impl<'a> PssSigner<'a> {
 }
 
 #[derive(Debug)]
-pub struct NymSecretKey {
+pub struct Icc {
     gpk: GroupManagerPublicKey,
     sk_icc_1_u: SecretKey,
     sk_icc_2_u: SecretKey
 }
 
-impl NymSecretKey {
+impl Icc {
     pub fn new(gpk: GroupManagerPublicKey, sk_icc_1_u: SecretKey, sk_icc_2_u: SecretKey) -> Self {
         let nym = Self { gpk, sk_icc_1_u, sk_icc_2_u };
         assert!(nym.valid_for_gpk(&nym.gpk));
@@ -182,7 +182,7 @@ impl GroupManager {
         sk_icc
     }
 
-    pub fn nym(&self) -> NymSecretKey {
+    pub fn new_icc(&self) -> Icc {
         let sk_icc_2_u = SecretKey::random(&mut OsRng::default());
         let sk_icc_2_u_scalar = Scalar::from(sk_icc_2_u.as_scalar_primitive());
         let sk_m_scalar = Scalar::from(self.sk_m.as_scalar_primitive());
@@ -192,10 +192,10 @@ impl GroupManager {
         let multiplication = sk_m_scalar.mul(&sk_icc_2_u_scalar);
         let sk_icc_1_u_scalar = sk_icc_scalar.sub(&multiplication);
         let sk_icc_1_u = SecretKey::new(ScalarPrimitive::from(&sk_icc_1_u_scalar));
-        NymSecretKey::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
+        Icc::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
     }
 
-    pub fn sector(&mut self, deanonymizable: bool) -> PublicKey {
+    pub fn new_sector(&mut self, deanonymizable: bool) -> PublicKey {
         let key = SectorKey(SecretKey::random(&mut OsRng::default()));
         let pubkey = key.public_key();
         self.sectors.push((pubkey.clone(), match deanonymizable {
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn valid_keys() {
         let mut group_manager = GroupManager::new();
-        let nym = group_manager.nym();
+        let nym = group_manager.new_icc();
         assert!(nym.valid_for_gpk(group_manager.public_key()));
 
         let _ = group_manager.renew_icc();
@@ -280,8 +280,8 @@ mod tests {
     #[test]
     fn valid_signature() {
         let mut group_manager = GroupManager::new();
-        let nym = group_manager.nym();
-        let sector = group_manager.sector(false);
+        let nym = group_manager.new_icc();
+        let sector = group_manager.new_sector(false);
 
         let combinations = vec![(true, true), (true, false), (false, true), (false, false)];
         for (id1, id2) in combinations {
@@ -294,8 +294,8 @@ mod tests {
     #[test]
     fn invalid_signature() {
         let mut group_manager = GroupManager::new();
-        let nym = group_manager.nym();
-        let sector = group_manager.sector(false);
+        let nym = group_manager.new_icc();
+        let sector = group_manager.new_sector(false);
 
         let combinations = vec![(true, true), (true, false), (false, true), (false, false)];
         for (id1, id2) in combinations {

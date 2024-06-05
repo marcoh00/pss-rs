@@ -1,4 +1,4 @@
-mod group;
+pub mod group;
 mod ecc;
 
-pub use ecc::{GroupManager, GroupManagerPublicKey, NymSecretKey};
+pub use ecc::{GroupManager, GroupManagerPublicKey, Icc};
