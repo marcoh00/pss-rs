@@ -1,7 +1,7 @@
 use std::{collections::HashSet, marker::PhantomData};
 
-use crypto_bigint::{const_residue, impl_modulus, modular::{constant_mod::{Residue, ResidueParams}, Retrieve}, rand_core::OsRng, CheckedSub, ConcatMixed, Encoding, NonZero, RandomMod, SplitMixed, Uint, U2048, U64};
-use sha3::Digest;
+use crypto_bigint::{const_residue, generic_array::GenericArray, impl_modulus, modular::{constant_mod::{Residue, ResidueParams}, Retrieve}, rand_core::OsRng, ArrayDecoding, ArrayEncoding, CheckedSub, ConcatMixed, Encoding, NonZero, RandomMod, SplitMixed, SubMod, Uint, U2048, U256, U64};
+use sha3::{digest::OutputSizeUser, Digest};
 
 const DH_MODP_2048_MODULUS_HEX: &str = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
 impl_modulus!(DhModp2048Modulus, U2048, DH_MODP_2048_MODULUS_HEX);
@@ -15,64 +15,105 @@ pub const DH_TINY_TEST: Residue<DhTinyTestInsecureModulus, { U64::LIMBS }> = con
 
 type PkSector<const LIMBS: usize, MOD> = Residue<MOD, LIMBS>;
 
-#[derive(PartialEq, Eq, Debug)]
-pub struct Dsnym<const LIMBS: usize, MOD: ResidueParams<LIMBS>>(Residue<MOD, LIMBS>);
+const ID_DSI: &[u8] = b"TODO replace with algorithm id";
 
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> core::hash::Hash for Dsnym<LIMBS, MOD> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.retrieve().hash(state);
+fn signature_hash<const LIMBS: usize, MOD: ResidueParams<LIMBS>, T: AsRef<[u8]>>(q: &Residue<MOD, LIMBS>, a1_i_sector_icc_1: Option<(Residue<MOD, LIMBS>, &Residue<MOD, LIMBS>)>, a2_i_sector_icc_2: Option<(Residue<MOD, LIMBS>, &Residue<MOD, LIMBS>)>, pk_sector: &PkSector<LIMBS, MOD>, message: &[u8]) -> GenericArray<u8, <sha3::Keccak256 as OutputSizeUser>::OutputSize>
+where Uint<LIMBS>: Encoding<Repr = T> {
+    let mut c_message_buffer = Vec::new();
+    c_message_buffer.extend_from_slice(&q.retrieve().to_be_bytes().as_ref());
+    if let Some((a1, i_sector_icc_1)) = a1_i_sector_icc_1 {
+        c_message_buffer.extend_from_slice(i_sector_icc_1.retrieve().to_be_bytes().as_ref());
+        c_message_buffer.extend_from_slice(a1.retrieve().to_be_bytes().as_ref());
     }
+    if let Some((a2, i_sector_icc_2)) = a2_i_sector_icc_2 {
+        c_message_buffer.extend_from_slice(i_sector_icc_2.retrieve().to_be_bytes().as_ref());
+        c_message_buffer.extend_from_slice(a2.retrieve().to_be_bytes().as_ref());
+    }
+    c_message_buffer.extend_from_slice(pk_sector.retrieve().to_be_bytes().as_ref());
+    c_message_buffer.extend_from_slice(ID_DSI);
+    c_message_buffer.extend_from_slice(message);
+
+
+    sha3::Keccak256::digest(&c_message_buffer)
+}
+
+#[derive(Debug, Clone)]
+pub struct PssSignature<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
+    c: Uint<LIMBS>,
+    s1: Uint<LIMBS>,
+    s2: Uint<LIMBS>,
+    pseudonyms: (Option<Residue<MOD, LIMBS>>, Option<Residue<MOD, LIMBS>>)
 }
 
 #[derive(Debug)]
-pub struct PssSignature<const LIMBS: usize, MOD: ResidueParams<LIMBS>>
+pub struct PssSigner<'a, const LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding {
-    c: [u8; 32],
-    s1: Uint<LIMBS>,
-    s2: Uint<LIMBS>,
-    _mod: PhantomData<MOD>
+    g: &'a Residue<MOD, LIMBS>,
+    sk_icc_1_u: &'a Uint<LIMBS>,
+    sk_icc_2_u: &'a Uint<LIMBS>,
+    pk_sector: &'a Residue<MOD, LIMBS>,
+    pk_m: &'a Residue<MOD, LIMBS>,
+    i_sector_icc_1: Option<Residue<MOD, LIMBS>>,
+    i_sector_icc_2: Option<Residue<MOD, LIMBS>>,
 }
 
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> PssSignature<LIMBS, MOD>
-where Uint<LIMBS>: Encoding {
-    pub fn new(c: [u8; 32], s1: Uint<LIMBS>, s2: Uint<LIMBS>) -> Self {
-        Self { c, s1, s2, _mod: PhantomData }
-    }
+impl<'a, const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> PssSigner<'a, LIMBS, MOD>
+where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
+    pub fn sign(&self, message: &[u8]) -> PssSignature<LIMBS, MOD> {
+        let k1 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
+        let k2 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
 
-    pub fn check_with_list(&self, group: &GroupManagerPublicKey<LIMBS, MOD>, dsnym: &Dsnym<LIMBS, MOD>, pk_sector: &PkSector<LIMBS, MOD>, disallow_list:HashSet<Dsnym<LIMBS, MOD>>, m: &[u8]) -> bool {
-        self.check(group, dsnym, pk_sector, m) && !disallow_list.contains(dsnym)
-    }
+        let g_k1 = self.g.pow(&k1);
+        let pk_m_k2 = self.pk_m.pow(&k2);
+        let q = g_k1.mul(&pk_m_k2);
 
-    pub fn check(&self, group: &GroupManagerPublicKey<LIMBS, MOD>, dsnym: &Dsnym<LIMBS, MOD>, pk_sector: &PkSector<LIMBS, MOD>, m: &[u8]) -> bool {
-        self.c == self.check_hash(group, dsnym, pk_sector, m)
-    }
+        let pseudonym1 = match self.i_sector_icc_1 {
+            Some(ref pubkey) => Some((self.pk_sector.pow(&k1), pubkey)),
+            None => None
+        };
+        let pseudonym2 = match self.i_sector_icc_2 {
+            Some(ref pubkey) => Some((self.pk_sector.pow(&k2), pubkey)),
+            None => None
+        };
 
-    pub fn check_hash(&self, group: &GroupManagerPublicKey<LIMBS, MOD>, dsnym: &Dsnym<LIMBS, MOD>, pk_sector: &PkSector<LIMBS, MOD>, m: &[u8]) -> [u8; 32] {
-        let mut c_num_bytes = Vec::with_capacity(Uint::<LIMBS>::BYTES);
-        for i in 0..Uint::<LIMBS>::BYTES {
-            if i < 32 {
-                c_num_bytes.push(self.c[i]);
-            } else {
-                c_num_bytes.push(0);
-            }
+        let c_bin = signature_hash(&q, pseudonym1, pseudonym2, &self.pk_sector, message);
+        let c = c_bin.into_uint_be().resize();
+
+        let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
+
+        let c_sk_icc_1_u = mul_mod(self.sk_icc_1_u, &c, &fermat_modulus);
+        let c_sk_icc_2_u = mul_mod(self.sk_icc_2_u, &c, &fermat_modulus);
+
+        let s1 = k1.sub_mod(&c_sk_icc_1_u, &fermat_modulus);
+        let s2 = k2.sub_mod(&c_sk_icc_2_u, &fermat_modulus);
+
+        PssSignature {
+            c,
+            s1,
+            s2,
+            pseudonyms: (
+                self.i_sector_icc_1,
+                self.i_sector_icc_2
+            )
         }
-        let c_num = Uint::<LIMBS>::from_be_slice(&c_num_bytes);
-        let a1 = group.pk_m.pow(&c_num).mul(&group.g.pow(&self.s1)).mul(&group.pk_icc.pow(&self.s2)).retrieve();
-        let a2 = dsnym.0.pow(&c_num).mul(&pk_sector.pow(&self.s1)).retrieve();
+    }
+}
 
-        let mut c_input: Vec<u8> = Vec::with_capacity(U2048::BYTES * 4 + m.len());
-        c_input.extend(pk_sector.retrieve().to_be_bytes().as_ref());
-        c_input.extend(dsnym.0.retrieve().to_be_bytes().as_ref());
-        c_input.extend(a1.to_be_bytes().as_ref());
-        c_input.extend(a2.to_be_bytes().as_ref());
-        c_input.extend(m);
-        sha3::Keccak256::digest(&c_input).as_slice().try_into().expect("invalid length")
+pub struct SectorSpecificIdentifiers<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
+    i_sector_icc_1: Residue<MOD, LIMBS>,
+    i_sector_icc_2: Residue<MOD, LIMBS>
+}
+
+impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> SectorSpecificIdentifiers<LIMBS, MOD> {
+    pub fn new(i_sector_icc_1: Residue<MOD, LIMBS>, i_sector_icc_2: Residue<MOD, LIMBS>) -> Self {
+        Self { i_sector_icc_1, i_sector_icc_2 }
     }
 }
 
 #[derive(Debug)]
 pub struct Icc<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
+    gpk: GroupManagerPublicKey<LIMBS, MOD>,
     sk_icc_1_u: Uint<LIMBS>,
     sk_icc_2_u: Uint<LIMBS>,
     _mod: PhantomData<MOD>
@@ -80,65 +121,93 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
 
 impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> Icc<LIMBS, WIDE_LIMBS, MOD>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
-    pub fn new(sk_icc_1_u: Uint<LIMBS>, sk_icc_2_u: Uint<LIMBS>) -> Self {
+    pub fn new(gpk: GroupManagerPublicKey<LIMBS, MOD>, sk_icc_1_u: Uint<LIMBS>, sk_icc_2_u: Uint<LIMBS>) -> Self {
         Self {
-            sk_icc_1_u, sk_icc_2_u, _mod: PhantomData
+            gpk, sk_icc_1_u, sk_icc_2_u, _mod: PhantomData
         }
     }
 
-    pub fn dsnym(&self, pk_sector: &PkSector<LIMBS, MOD>) -> Dsnym<LIMBS, MOD> {
-        Dsnym(pk_sector.pow(&self.sk_icc_1_u))
+    pub fn sector_identifiers(&self, pk_sector: &PkSector<LIMBS, MOD>) -> SectorSpecificIdentifiers<LIMBS, MOD> {
+        let i_sector_icc_1 = pk_sector.pow(&self.sk_icc_1_u);
+        let i_sector_icc_2 = pk_sector.pow(&self.sk_icc_2_u);
+        SectorSpecificIdentifiers::new(i_sector_icc_1, i_sector_icc_2)
     }
 
-    pub fn sig(&self, group: &GroupManagerPublicKey<LIMBS, MOD>, dsnym: &Dsnym<LIMBS, MOD>, pk_sector: &PkSector<LIMBS, MOD>, m: &[u8]) -> PssSignature<LIMBS, MOD> {
-        let t1 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        let t2 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        let a1 = group.g.pow(&t1).mul(&group.pk_icc.pow(&t2)).retrieve();
-        let a2 = pk_sector.pow(&t1).retrieve();
-
-        println!("t1={:?}, t2={:?}, a1=g1^t1*g2^t2={:?}, pk_sector={:?}, a2=pk_sector^t1={:?}", t1, t2, a1, pk_sector.retrieve(), a2);
-        
-        let mut c_input: Vec<u8> = Vec::with_capacity(U2048::BYTES * 4 + m.len());
-        c_input.extend(pk_sector.retrieve().to_be_bytes().as_ref());
-        c_input.extend(dsnym.0.retrieve().to_be_bytes().as_ref());
-        c_input.extend(a1.to_be_bytes().as_ref());
-        c_input.extend(a2.to_be_bytes().as_ref());
-        c_input.extend(m);
-        let c: [u8; 32] = sha3::Keccak256::digest(&c_input).as_slice().try_into().expect("invalid length");
-
-        let mut c_num_bytes = Vec::with_capacity(Uint::<LIMBS>::BYTES);
-        for i in 0..Uint::<LIMBS>::BYTES {
-            if i < 32 {
-                c_num_bytes.push(c[i]);
-            } else {
-                c_num_bytes.push(0);
-            }
+    pub fn signer<'pk, 'me: 'pk>(&'me self, pk_sector: &'pk PkSector<LIMBS, MOD>, use_identifier1: bool, use_identifier2: bool) -> PssSigner<'pk, LIMBS, MOD> {
+        let identifiers = self.sector_identifiers(pk_sector);
+        let (i_sector_icc_1, i_sector_icc_2) = match (use_identifier1, use_identifier2) {
+            (true, true) => (Some(identifiers.i_sector_icc_1), Some(identifiers.i_sector_icc_2)),
+            (true, false) => (Some(identifiers.i_sector_icc_1), None),
+            (false, true) => (None, Some(identifiers.i_sector_icc_2)),
+            (false, false) => (None, None)
+        };
+        PssSigner {
+            g: &self.gpk.g,
+            sk_icc_1_u: &self.sk_icc_1_u,
+            sk_icc_2_u: &self.sk_icc_2_u,
+            pk_sector: pk_sector,
+            pk_m: &self.gpk.pk_m,
+            i_sector_icc_1,
+            i_sector_icc_2
         }
-        let c_num = Uint::<LIMBS>::from_be_slice(&c_num_bytes);
-        let c_residue = Residue::<MOD, LIMBS>::new(&c_num);
-
-        println!("c_num={:?}, c_residue={:?}", c_num, c_residue.retrieve());
-
-        let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
-        let c_x1 = mul_mod(&c_num, &self.sk_icc_1_u, &fermat_modulus);
-        let s1 = t1.sub_mod(&c_x1, &fermat_modulus);
-
-        let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
-        let c_x2 = mul_mod(&c_num, &self.sk_icc_2_u, &fermat_modulus);
-        let s2 = t2.sub_mod(&c_x2, &fermat_modulus);
-
-        println!("s1=t1-c*x1={:?}, s2=t2-c*x2={:?}", s1, s2);
-
-        PssSignature::new(c, s1, s2)
-
     }
 
-    pub fn valid_for_group(&self, group: &GroupManagerPublicKey<LIMBS, MOD>) -> bool {
+    pub fn valid_for_gpk(&self, group: &GroupManagerPublicKey<LIMBS, MOD>) -> bool {
+        // g^sk_icc_1_u * pk_m^sk_icc_2_u == pk_icc
         let part1 = group.g.pow(&self.sk_icc_1_u);
-        let part2 = group.pk_icc.pow(&self.sk_icc_2_u);
+        let part2 = group.pk_m.pow(&self.sk_icc_2_u);
         let y_self = part1.mul(&part2).retrieve();
         println!("g1 = {:?}, g2 = {:?}, g1^x1 = {:?}, g2^x2 = {:?}, g1^x1*g2^x2 = {:?}", group.g.retrieve(), group.pk_icc.retrieve(), part1.retrieve(), part2.retrieve(), y_self);
-        y_self == group.pk_m.retrieve()
+        y_self == group.pk_icc.retrieve()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GroupManagerPublicKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
+    g: Residue<MOD, LIMBS>,
+    pk_icc: Residue<MOD, LIMBS>,
+    pk_m: Residue<MOD, LIMBS>
+}
+
+impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupManagerPublicKey<LIMBS, MOD>
+where Uint<LIMBS>: Encoding {
+    pub fn new(g: Residue<MOD, LIMBS>, pk_icc: Residue<MOD, LIMBS>, pk_m: Residue<MOD, LIMBS>) -> Self {
+        Self { g, pk_icc, pk_m }
+    }
+
+    pub fn check_signature(&self, message: &[u8], pk_sector: &PkSector<LIMBS, MOD>, signature: &PssSignature<LIMBS, MOD>) -> bool {
+        self.recover_c(message, pk_sector, signature) == signature.c
+    }
+
+    pub(crate) fn recover_c(&self, message: &[u8], pk_sector: &PkSector<LIMBS, MOD>, signature: &PssSignature<LIMBS, MOD>) -> Uint<LIMBS> {
+        let pk_icc_c = self.pk_icc.pow(&signature.c);
+        let g_s1 = self.g.pow(&signature.s1);
+        let pk_m_s2 = self.pk_m.pow(&signature.s2);
+        let q = pk_icc_c.mul(&g_s1).mul(&pk_m_s2);
+
+        let pseudonym1 = match signature.pseudonyms.0 {
+            Some(ref pubkey) => {
+                let sector_c = pubkey.pow(&signature.c);
+                let pk_s = pk_sector.pow(&signature.s1);
+                let a1 = sector_c.add(&pk_s);
+                Some((a1, pubkey))
+            },
+            None => None,
+        };
+        let pseudonym2 = match signature.pseudonyms.1 {
+            Some(ref pubkey) => {
+                let sector_c = pubkey.pow(&signature.c);
+                let pk_s = pk_sector.pow(&signature.s2);
+                let a2 = sector_c.add(&pk_s);
+                Some((a2, pubkey))
+            },
+            None => None,
+        };
+
+        let c_bytes = signature_hash(&q, pseudonym1, pseudonym2, pk_sector, message);
+        let c = c_bytes.into_uint_be().resize();
+
+        c
     }
 }
 
@@ -147,37 +216,41 @@ pub struct GroupManager<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: Residu
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     sk_m: Uint<LIMBS>,
     sk_icc: Uint<LIMBS>,
-    g: Residue<MOD, LIMBS>,
+    gpk: GroupManagerPublicKey<LIMBS, MOD>,
+    sectors: Vec<(PkSector<LIMBS, MOD>, Option<Uint<LIMBS>>)>,
     _mod: PhantomData<MOD>
-}
-
-#[derive(Debug)]
-pub struct GroupManagerPublicKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
-    g: Residue<MOD, LIMBS>,
-    pk_icc: Residue<MOD, LIMBS>,
-    pk_m: Residue<MOD, LIMBS>
 }
 
 impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupManager<LIMBS, WIDE_LIMBS, MOD>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     pub fn new(g: Residue<MOD, LIMBS>) -> Self {
-        let z = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        let x = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        Self { sk_m: z, sk_icc: x, g, _mod: PhantomData }
+        let sk_m = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
+        let sk_icc = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
+        let pk_m = g.pow(&sk_m);
+        let pk_icc = g.pow(&sk_icc);
+        let gpk = GroupManagerPublicKey::new(g, pk_icc, pk_m);
+        Self { sk_m, sk_icc, gpk, sectors: Vec::new(), _mod: PhantomData }
     }
 
-    pub fn params(&self) -> GroupManagerPublicKey<LIMBS, MOD> {
-        let g2 = self.g.pow(&self.sk_m);
-        let gpk = self.g.pow(&self.sk_icc);
-        println!("z={:?}, x={:?}, g={:?}, gpk/g^x={:?}", self.sk_m, self.sk_icc, self.g.retrieve(), gpk.retrieve());
-        GroupManagerPublicKey {
-            g: self.g.clone(), pk_icc: g2, pk_m: gpk
-        }
+    pub fn renew_icc(&mut self) -> Uint<LIMBS> {
+        let mut sk_icc = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
+        self.gpk.pk_icc = self.gpk.g.pow(&sk_icc);
+        std::mem::swap(&mut self.sk_icc, &mut sk_icc);
+        sk_icc
     }
 
-    pub fn new_sector(&self, deanonymizable: bool) -> PkSector<LIMBS, MOD> {
-        let r = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        self.g.pow(&r)
+    pub fn public_key(&self) -> &GroupManagerPublicKey<LIMBS, MOD> {
+        &self.gpk
+    }
+
+    pub fn new_sector(&mut self, deanonymizable: bool) -> PkSector<LIMBS, MOD> {
+        let sk_sector = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
+        let pk_sector = self.gpk.g.pow(&sk_sector);
+        self.sectors.push((pk_sector.clone(), match deanonymizable {
+            true => Some(sk_sector),
+            false => None
+        }));
+        pk_sector
     }
 
     pub fn new_icc(&self) -> Icc<LIMBS, WIDE_LIMBS, MOD> {
@@ -187,7 +260,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let multiplication = mul_mod(&self.sk_m, &sk_icc_2_u, &fermat_modulus);
         let sk_icc_1_u = self.sk_icc.sub_mod(&multiplication, &fermat_modulus);
         println!("x2 = {}, mod-1 = {}, z*x2 = {}, x-z*x2 = {}", sk_icc_2_u, fermat_modulus, multiplication, sk_icc_1_u);
-        Icc::new(sk_icc_1_u, sk_icc_2_u)
+        Icc::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
     }
 
 }
@@ -196,8 +269,8 @@ fn mul_mod<const LIMBS: usize, const WIDE_LIMBS: usize>(a: &Uint<LIMBS>, b: &Uin
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     let mul = a.mul(&b);
     let wide_modulus = Uint::<LIMBS>::from_u8(0).concat_mixed(p);
-    let residue = mul.div_rem(&NonZero::from_uint(wide_modulus)).1;
-    residue.split_mixed().1
+    let residue = mul.rem(&NonZero::from_uint(wide_modulus));
+    residue.resize()
 }
 
 
@@ -205,32 +278,36 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
 mod tests {
     use super::*;
 
+    const SIGN_MESSAGE: &[u8] = b"TEST MESSAGE";
+
     #[test]
     fn it_works() {
-        let group_manager = GroupManager::new(DH_TINY_TEST);
-        let group_params = group_manager.params();
-        let domain = group_manager.new_sector(true);
-        let user = group_manager.new_icc();
+        let mut group_manager = GroupManager::new(DH_TINY_TEST);
+        let icc = group_manager.new_icc();
+        let sector = group_manager.new_sector(false);
+        let signer = icc.signer(&sector, true, true);
+        let signature = signer.sign(SIGN_MESSAGE);
+        let valid = group_manager.public_key().check_signature(SIGN_MESSAGE, &sector, &signature);
 
-        println!("Group Manager: {:?}", group_manager);
-        println!("Group Params: {:?}", group_params);
-        println!("Domain: {:?}", domain);
-        println!("User: {:?}", user);
-
-        println!("Valid key? {}", user.valid_for_group(&group_params));
-
-        let domain_for_user = user.dsnym(&domain);
-        let message = "hello test test hello".as_bytes();
-        let signature = user.sig(&group_params, &domain_for_user, &domain, message);
-
-        println!("Signature: {:?}", signature);
-
-        let check_hash = signature.check_hash(&group_params, &domain_for_user, &domain, message);
-
-        println!("Check Hash: {:?}", check_hash);
-
-        let valid = signature.check(&group_params, &domain_for_user, &domain, message);
+        println!("Group Manager");
+        println!("{:#?}", group_manager);
+        println!("Group Manager");
+        println!("{:#?}", icc);
+        println!("Signer");
+        println!("{:#?}", signer);
+        println!("Signature");
+        println!("{:#?}", signature);
 
         assert!(valid)
+    }
+
+    #[test]
+    fn valid_keys() {
+        let mut group_manager = GroupManager::new(DH_MODP_2048);
+        let nym = group_manager.new_icc();
+        assert!(nym.valid_for_gpk(group_manager.public_key()));
+
+        let _ = group_manager.renew_icc();
+        assert!(!nym.valid_for_gpk(group_manager.public_key()));
     }
 }
