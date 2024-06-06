@@ -203,7 +203,7 @@ where Uint<LIMBS>: Encoding {
             Some(ref pubkey) => {
                 let sector_c = pubkey.pow(&signature.c);
                 let pk_s = pk_sector.pow(&signature.s1);
-                let a1 = sector_c.add(&pk_s);
+                let a1 = sector_c.mul(&pk_s);
                 println!("A1' = I_icc_1^c * PK_sector^s1 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s1, sector_c.retrieve(), pk_s.retrieve(), a1.retrieve());
                 Some((a1, pubkey))
             },
@@ -213,7 +213,7 @@ where Uint<LIMBS>: Encoding {
             Some(ref pubkey) => {
                 let sector_c = pubkey.pow(&signature.c);
                 let pk_s = pk_sector.pow(&signature.s2);
-                let a2 = sector_c.add(&pk_s);
+                let a2 = sector_c.mul(&pk_s);
                 println!("A2' = I_icc_2^c * PK_sector^s2 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s2, sector_c.retrieve(), pk_s.retrieve(), a2.retrieve());
                 Some((a2, pubkey))
             },
