@@ -63,13 +63,13 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let k1 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
         let k2 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
 
-        println!("k1 = {}, k2 = {}", k1, k2);
+        // println!("k1 = {}, k2 = {}", k1, k2);
 
         let g_k1 = self.g.pow(&k1);
         let pk_m_k2 = self.pk_m.pow(&k2);
         let q = g_k1.mul(&pk_m_k2);
 
-        println!("Q = g^k1 * PK_m^k2 = {}^{} * {}^{} = {} * {} = {}", self.g.retrieve(), k1, self.pk_m.retrieve(), k2, g_k1.retrieve(), pk_m_k2.retrieve(), q.retrieve());
+        // println!("Q = g^k1 * PK_m^k2 = {}^{} * {}^{} = {} * {} = {}", self.g.retrieve(), k1, self.pk_m.retrieve(), k2, g_k1.retrieve(), pk_m_k2.retrieve(), q.retrieve());
 
         let pseudonym1 = match self.i_sector_icc_1 {
             Some(ref pubkey) => Some((self.pk_sector.pow(&k1), pubkey)),
@@ -80,13 +80,13 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
             None => None
         };
 
-        println!("A1 = PK_sector ^ k1 | PK_sector ^ SK_icc_1 = {:?}", pseudonym1.map(|(pkpow, pubkey)| (pkpow.retrieve(), pubkey.retrieve())));
-        println!("A2 = PK_sector ^ k2 | PK_sector ^ SK_icc_2 = {:?}", pseudonym2.map(|(pkpow, pubkey)| (pkpow.retrieve(), pubkey.retrieve())));
+        // println!("A1 = PK_sector ^ k1 | PK_sector ^ SK_icc_1 = {:?}", pseudonym1.map(|(pkpow, pubkey)| (pkpow.retrieve(), pubkey.retrieve())));
+        // println!("A2 = PK_sector ^ k2 | PK_sector ^ SK_icc_2 = {:?}", pseudonym2.map(|(pkpow, pubkey)| (pkpow.retrieve(), pubkey.retrieve())));
 
         let c_bin = signature_hash(&q, pseudonym1, pseudonym2, &self.pk_sector, message);
         let c = c_bin.into_uint_be().resize();
 
-        println!("c = {} = {}", &c_bin.iter().map(|b| format!("{:X}", b)).collect::<String>(), c);
+        // println!("c = {} = {}", &c_bin.iter().map(|b| format!("{:X}", b)).collect::<String>(), c);
 
         let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
 
@@ -96,8 +96,8 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let s1 = k1.sub_mod(&c_sk_icc_1_u, &fermat_modulus);
         let s2 = k2.sub_mod(&c_sk_icc_2_u, &fermat_modulus);
 
-        println!("s1 = k1 - c * SK_icc_1 = {} - {} * {} = {} - {} = {}", k1, c, self.sk_icc_1_u, k1, c_sk_icc_1_u, s1);
-        println!("s2 = k2 - c * SK_icc_2 = {} - {} * {} = {} - {} = {}", k2, c, self.sk_icc_2_u, k2, c_sk_icc_2_u, s2);
+        // println!("s1 = k1 - c * SK_icc_1 = {} - {} * {} = {} - {} = {}", k1, c, self.sk_icc_1_u, k1, c_sk_icc_1_u, s1);
+        // println!("s2 = k2 - c * SK_icc_2 = {} - {} * {} = {} - {} = {}", k2, c, self.sk_icc_2_u, k2, c_sk_icc_2_u, s2);
 
         PssSignature {
             c,
@@ -169,7 +169,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let part1 = group.g.pow(&self.sk_icc_1_u);
         let part2 = group.pk_m.pow(&self.sk_icc_2_u);
         let y_self = part1.mul(&part2).retrieve();
-        println!("g1 = {:?}, g2 = {:?}, g1^x1 = {:?}, g2^x2 = {:?}, g1^x1*g2^x2 = {:?}", group.g.retrieve(), group.pk_icc.retrieve(), part1.retrieve(), part2.retrieve(), y_self);
+        // println!("g1 = {:?}, g2 = {:?}, g1^x1 = {:?}, g2^x2 = {:?}, g1^x1*g2^x2 = {:?}", group.g.retrieve(), group.pk_icc.retrieve(), part1.retrieve(), part2.retrieve(), y_self);
         y_self == group.pk_icc.retrieve()
     }
 }
@@ -197,14 +197,14 @@ where Uint<LIMBS>: Encoding {
         let pk_m_s2 = self.pk_m.pow(&signature.s2);
         let q = pk_icc_c.mul(&g_s1).mul(&pk_m_s2);
 
-        println!("Q' = PK_icc^c * g^s1 * PK_m^s2 = {} * {} * {} = {}", pk_icc_c.retrieve(), g_s1.retrieve(), pk_m_s2.retrieve(), q.retrieve());
+        // println!("Q' = PK_icc^c * g^s1 * PK_m^s2 = {} * {} * {} = {}", pk_icc_c.retrieve(), g_s1.retrieve(), pk_m_s2.retrieve(), q.retrieve());
 
         let pseudonym1 = match signature.pseudonyms.0 {
             Some(ref pubkey) => {
                 let sector_c = pubkey.pow(&signature.c);
                 let pk_s = pk_sector.pow(&signature.s1);
                 let a1 = sector_c.mul(&pk_s);
-                println!("A1' = I_icc_1^c * PK_sector^s1 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s1, sector_c.retrieve(), pk_s.retrieve(), a1.retrieve());
+                // println!("A1' = I_icc_1^c * PK_sector^s1 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s1, sector_c.retrieve(), pk_s.retrieve(), a1.retrieve());
                 Some((a1, pubkey))
             },
             None => None,
@@ -214,7 +214,7 @@ where Uint<LIMBS>: Encoding {
                 let sector_c = pubkey.pow(&signature.c);
                 let pk_s = pk_sector.pow(&signature.s2);
                 let a2 = sector_c.mul(&pk_s);
-                println!("A2' = I_icc_2^c * PK_sector^s2 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s2, sector_c.retrieve(), pk_s.retrieve(), a2.retrieve());
+                // println!("A2' = I_icc_2^c * PK_sector^s2 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s2, sector_c.retrieve(), pk_s.retrieve(), a2.retrieve());
                 Some((a2, pubkey))
             },
             None => None,
@@ -223,7 +223,7 @@ where Uint<LIMBS>: Encoding {
         let c_bytes = signature_hash(&q, pseudonym1, pseudonym2, pk_sector, message);
         let c = c_bytes.into_uint_be().resize();
 
-        println!("c = {} = {}", &c_bytes.iter().map(|b| format!("{:X}", b)).collect::<String>(), c);
+        // println!("c = {} = {}", &c_bytes.iter().map(|b| format!("{:X}", b)).collect::<String>(), c);
 
         c
     }
@@ -246,9 +246,9 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let sk_icc = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
         let pk_m = g.pow(&sk_m);
         let pk_icc = g.pow(&sk_icc);
-        println!("g = {}, SK_m = {}, SK_icc = {}", g.retrieve(), sk_m, sk_icc);
-        println!("PK_m = g^SK_m = {}^{} = {}", g.retrieve(), sk_m, pk_m.retrieve());
-        println!("PK_icc = g^SK_icc = {}^{} = {}", g.retrieve(), sk_icc, pk_icc.retrieve());
+        // println!("g = {}, SK_m = {}, SK_icc = {}", g.retrieve(), sk_m, sk_icc);
+        // println!("PK_m = g^SK_m = {}^{} = {}", g.retrieve(), sk_m, pk_m.retrieve());
+        // println!("PK_icc = g^SK_icc = {}^{} = {}", g.retrieve(), sk_icc, pk_icc.retrieve());
         let gpk = GroupManagerPublicKey::new(g, pk_icc, pk_m);
         Self { sk_m, sk_icc, gpk, sectors: Vec::new(), _mod: PhantomData }
     }
@@ -268,8 +268,8 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let sk_sector = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
         let pk_sector = self.gpk.g.pow(&sk_sector);
 
-        println!("SK_sector = {}", sk_sector);
-        println!("PK_sector = g^SK_sector = {}^{} = {}", self.gpk.g.retrieve(), sk_sector, pk_sector.retrieve());
+        // println!("SK_sector = {}", sk_sector);
+        // println!("PK_sector = g^SK_sector = {}^{} = {}", self.gpk.g.retrieve(), sk_sector, pk_sector.retrieve());
 
         self.sectors.push((pk_sector.clone(), match deanonymizable {
             true => Some(sk_sector),
@@ -285,8 +285,8 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let multiplication = mul_mod(&self.sk_m, &sk_icc_2_u, &fermat_modulus);
         let sk_icc_1_u = self.sk_icc.sub_mod(&multiplication, &fermat_modulus);
 
-        println!("SK_icc_2 = {}, fermat_modulus = {}", sk_icc_2_u, fermat_modulus);
-        println!("SK_icc_1 = SK_icc - SK_m * SK_icc_2 = {} - {} * {} = {} - {} = {}", self.sk_icc, self.sk_m, sk_icc_2_u, self.sk_icc, multiplication, sk_icc_1_u);
+        // println!("SK_icc_2 = {}, fermat_modulus = {}", sk_icc_2_u, fermat_modulus);
+        // println!("SK_icc_1 = SK_icc - SK_m * SK_icc_2 = {} - {} * {} = {} - {} = {}", self.sk_icc, self.sk_m, sk_icc_2_u, self.sk_icc, multiplication, sk_icc_1_u);
         Icc::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
     }
 
