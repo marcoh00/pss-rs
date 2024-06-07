@@ -1,4 +1,4 @@
-use crate::{GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
+use crate::{GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
 
 use crypto_bigint::{generic_array::{sequence::GenericSequence, GenericArray}, rand_core::OsRng};
 use k256::{elliptic_curve::{hash2curve::FromOkm, sec1::ToEncodedPoint, PrimeField, ScalarPrimitive}, AffinePoint, PublicKey, Scalar, SecretKey};
@@ -62,10 +62,9 @@ impl Into<GenericPssSignature> for EccPssSignature {
             c: self.c.to_bytes().as_slice().into(),
             s1: self.s1.to_bytes().as_slice().into(),
             s2: self.s2.to_bytes().as_slice().into(),
-            pseudonyms: (
-                self.pseudonyms.0.map(|pk| pk.to_encoded_point(true).to_bytes()),
-                self.pseudonyms.1.map(|pk| pk.to_encoded_point(true).to_bytes())
-            )
+            pseudonym1: self.pseudonyms.0.map(|pk| pk.to_encoded_point(true).to_bytes()),
+            pseudonym2: self.pseudonyms.1.map(|pk| pk.to_encoded_point(true).to_bytes())
+            
         }
     }
 }
@@ -78,8 +77,8 @@ impl TryFrom<GenericPssSignature> for EccPssSignature {
         let s2 = Scalar::from_repr(*GenericArray::from_slice(&value.s2)).unwrap();
 
         let pseudonyms = (
-            value.pseudonyms.0.map(|spoint| PublicKey::from_sec1_bytes(spoint.as_ref()).unwrap()),
-            value.pseudonyms.1.map(|spoint| PublicKey::from_sec1_bytes(spoint.as_ref()).unwrap())
+            value.pseudonym1.map(|spoint| PublicKey::from_sec1_bytes(spoint.as_ref()).unwrap()),
+            value.pseudonym2.map(|spoint| PublicKey::from_sec1_bytes(spoint.as_ref()).unwrap())
         );
         Ok(EccPssSignature {
             c, s1, s2, pseudonyms
@@ -211,6 +210,21 @@ impl Icc for EccIcc {
             i_sector_icc_2
         }
     }
+    
+    fn from_generic_secret_key(secret_key: crate::GenericIccSecretKey, gpk: Self::GroupManagerPublicKey) -> Self {
+        let sk_icc_1_u = SecretKey::from_slice(&secret_key.sk_icc_1_u).unwrap();
+        let sk_icc_2_u = SecretKey::from_slice(&secret_key.sk_icc_2_u).unwrap();
+        Self {
+            gpk, sk_icc_1_u, sk_icc_2_u
+        }
+    }
+}
+
+
+impl From<EccIcc> for GenericIccSecretKey {
+    fn from(value: EccIcc) -> Self {
+        Self { sk_icc_1_u: value.sk_icc_1_u.to_bytes().as_slice().into(), sk_icc_2_u: value.sk_icc_2_u.to_bytes().as_slice().into() }
+    }
 }
 
 #[derive(Debug)]
@@ -239,6 +253,10 @@ impl GroupManager for EccGroupManager {
     fn new() -> Self {
         let sk_m = SecretKey::random(&mut OsRng::default());
         let sk_icc = SecretKey::random(&mut OsRng::default());
+        Self::new_from_secret_parts(sk_m, sk_icc)
+    }
+
+    fn new_from_secret_parts(sk_m: Self::SecretKey, sk_icc: Self::SecretKey) -> Self {
         let pk_m = sk_m.public_key();
         let pk_icc = sk_icc.public_key();
         let gpk = EccGroupManagerPublicKey::new(pk_m, pk_icc);
@@ -279,6 +297,19 @@ impl GroupManager for EccGroupManager {
     fn public_key(&self) -> &EccGroupManagerPublicKey {
         &self.gpk
     }
+    
+    fn from_generic_secret_key(secret_key: crate::GenericGroupManagerPrivateKey, _g: Option<Box<[u8]>>) -> Self {
+        Self::new_from_secret_parts(SecretKey::from_slice(&secret_key.sk_m).unwrap(), SecretKey::from_slice(&secret_key.sk_icc).unwrap())
+    }
+}
+
+impl From<EccGroupManager> for GenericGroupManagerPrivateKey {
+    fn from(value: EccGroupManager) -> Self {
+        Self {
+            sk_m: value.sk_m.to_bytes().as_slice().into(),
+            sk_icc: value.sk_icc.to_bytes().as_slice().into()
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -297,6 +328,18 @@ impl GroupManagerPublicKey for EccGroupManagerPublicKey {
 
     fn check_signature(&self, message: &[u8], pk_sector: &Self::PublicKey, signature: &Self::Signature) -> bool {
         self.recover_c(message, pk_sector, signature) == signature.c
+    }
+    
+    fn from_generic_gpk(gpk: crate::GenericGroupManagerPublicKey, _g: Option<Box<[u8]>>) -> Self {
+        let pk_m = PublicKey::from_sec1_bytes(&gpk.pk_m).unwrap();
+        let pk_icc = PublicKey::from_sec1_bytes(&gpk.pk_icc).unwrap();
+        Self { pk_icc, pk_m }
+    }
+}
+
+impl From<EccGroupManagerPublicKey> for GenericGroupManagerPublicKey {
+    fn from(value: EccGroupManagerPublicKey) -> Self {
+        Self { pk_m: value.pk_m.to_sec1_bytes(), pk_icc: value.pk_icc.to_sec1_bytes() }
     }
 }
 

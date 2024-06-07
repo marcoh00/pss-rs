@@ -1,20 +1,23 @@
-mod group;
-mod ecc;
+pub mod group;
+pub mod ecc;
 
-pub trait GroupManager {
+pub trait GroupManager: Into<GenericGroupManagerPrivateKey> {
     type SecretKey;
     type PublicKey;
     type GroupManagerPublicKey: GroupManagerPublicKey;
     type Icc: Icc;
 
     fn new() -> Self where Self: Sized;
+    fn new_from_secret_parts(sk_m: Self::SecretKey, sk_icc: Self::SecretKey) -> Self;
     fn renew_icc(&mut self) -> Self::SecretKey;
     fn new_icc(&self) -> Self::Icc;
     fn new_sector(&mut self, deanonymizable: bool) -> Self::PublicKey;
     fn public_key(&self) -> &Self::GroupManagerPublicKey;
+
+    fn from_generic_secret_key(secret_key: GenericGroupManagerPrivateKey, g: Option<Box<[u8]>>) -> Self;
 }
 
-pub trait Icc {
+pub trait Icc: Into<GenericIccSecretKey> {
     type GroupManagerPublicKey: GroupManagerPublicKey;
     type SecretKey;
     type SectorSpecificIdentifiers;
@@ -25,6 +28,8 @@ pub trait Icc {
     fn valid_for_gpk(&self, gpk: &Self::GroupManagerPublicKey) -> bool;
     fn sector_identifiers(&self, pk_sector: &Self::PublicKey) -> Self::SectorSpecificIdentifiers;
     fn signer<'a>(&'a self, pk_sector: &'a Self::PublicKey, use_identifier1: bool, use_identifier2: bool) -> Self::Signer<'a>;
+
+    fn from_generic_secret_key(secret_key: GenericIccSecretKey, gpk: Self::GroupManagerPublicKey) -> Self;
 }
 
 pub trait PssSigner {
@@ -33,12 +38,14 @@ pub trait PssSigner {
     fn sign(&self, message: &[u8]) -> Self::PssSignature;
 }
 
-pub trait GroupManagerPublicKey {
+pub trait GroupManagerPublicKey: Into<GenericGroupManagerPublicKey> {
     type PublicKey;
     type Signature: PssSignature;
 
     fn new(pk_m: Self::PublicKey, pk_icc: Self::PublicKey) -> Self where Self: Sized;
     fn check_signature(&self, message: &[u8], pk_sector: &Self::PublicKey, signature: &Self::Signature) -> bool;
+
+    fn from_generic_gpk(gpk: GenericGroupManagerPublicKey, g: Option<Box<[u8]>>) -> Self;
 }
 
 pub trait PssSignature: Into<GenericPssSignature> + TryFrom<GenericPssSignature> {
@@ -56,5 +63,21 @@ pub struct GenericPssSignature {
     c: Box<[u8]>,
     s1: Box<[u8]>,
     s2: Box<[u8]>,
-    pseudonyms: (Option<Box<[u8]>>, Option<Box<[u8]>>)
+    pseudonym1: Option<Box<[u8]>>,
+    pseudonym2: Option<Box<[u8]>>
+}
+
+pub struct GenericGroupManagerPrivateKey {
+    sk_m: Box<[u8]>,
+    sk_icc: Box<[u8]>,
+}
+
+pub struct GenericGroupManagerPublicKey {
+    pk_m: Box<[u8]>,
+    pk_icc: Box<[u8]>
+}
+
+pub struct GenericIccSecretKey {
+    sk_icc_1_u: Box<[u8]>,
+    sk_icc_2_u: Box<[u8]>
 }
