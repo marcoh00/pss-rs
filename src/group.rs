@@ -38,15 +38,17 @@ where Uint<LIMBS>: Encoding<Repr = T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct PssSignature<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
+pub struct GroupPssSignature<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
     c: Uint<LIMBS>,
     s1: Uint<LIMBS>,
     s2: Uint<LIMBS>,
     pseudonyms: (Option<Residue<MOD, LIMBS>>, Option<Residue<MOD, LIMBS>>)
 }
 
+
+
 #[derive(Debug)]
-pub struct PssSigner<'a, const LIMBS: usize, MOD: ResidueParams<LIMBS>>
+pub struct GroupPssSigner<'a, const LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding {
     g: &'a Residue<MOD, LIMBS>,
     sk_icc_1_u: &'a Uint<LIMBS>,
@@ -57,9 +59,9 @@ where Uint<LIMBS>: Encoding {
     i_sector_icc_2: Option<Residue<MOD, LIMBS>>,
 }
 
-impl<'a, const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> PssSigner<'a, LIMBS, MOD>
+impl<'a, const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupPssSigner<'a, LIMBS, MOD>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
-    pub fn sign(&self, message: &[u8]) -> PssSignature<LIMBS, MOD> {
+    pub fn sign(&self, message: &[u8]) -> GroupPssSignature<LIMBS, MOD> {
         let k1 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
         let k2 = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
 
@@ -99,7 +101,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         // println!("s1 = k1 - c * SK_icc_1 = {} - {} * {} = {} - {} = {}", k1, c, self.sk_icc_1_u, k1, c_sk_icc_1_u, s1);
         // println!("s2 = k2 - c * SK_icc_2 = {} - {} * {} = {} - {} = {}", k2, c, self.sk_icc_2_u, k2, c_sk_icc_2_u, s2);
 
-        PssSignature {
+        GroupPssSignature {
             c,
             s1,
             s2,
@@ -111,41 +113,41 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
     }
 }
 
-pub struct SectorSpecificIdentifiers<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
+pub struct GroupSectorSpecificIdentifiers<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
     i_sector_icc_1: Residue<MOD, LIMBS>,
     i_sector_icc_2: Residue<MOD, LIMBS>
 }
 
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> SectorSpecificIdentifiers<LIMBS, MOD> {
+impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupSectorSpecificIdentifiers<LIMBS, MOD> {
     pub fn new(i_sector_icc_1: Residue<MOD, LIMBS>, i_sector_icc_2: Residue<MOD, LIMBS>) -> Self {
         Self { i_sector_icc_1, i_sector_icc_2 }
     }
 }
 
 #[derive(Debug)]
-pub struct Icc<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>>
+pub struct GroupIcc<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
-    gpk: GroupManagerPublicKey<LIMBS, MOD>,
+    gpk: GroupGroupManagerPublicKey<LIMBS, MOD>,
     sk_icc_1_u: Uint<LIMBS>,
     sk_icc_2_u: Uint<LIMBS>,
     _mod: PhantomData<MOD>
 }
 
-impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> Icc<LIMBS, WIDE_LIMBS, MOD>
+impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupIcc<LIMBS, WIDE_LIMBS, MOD>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
-    pub fn new(gpk: GroupManagerPublicKey<LIMBS, MOD>, sk_icc_1_u: Uint<LIMBS>, sk_icc_2_u: Uint<LIMBS>) -> Self {
+    pub fn new(gpk: GroupGroupManagerPublicKey<LIMBS, MOD>, sk_icc_1_u: Uint<LIMBS>, sk_icc_2_u: Uint<LIMBS>) -> Self {
         Self {
             gpk, sk_icc_1_u, sk_icc_2_u, _mod: PhantomData
         }
     }
 
-    pub fn sector_identifiers(&self, pk_sector: &PkSector<LIMBS, MOD>) -> SectorSpecificIdentifiers<LIMBS, MOD> {
+    pub fn sector_identifiers(&self, pk_sector: &PkSector<LIMBS, MOD>) -> GroupSectorSpecificIdentifiers<LIMBS, MOD> {
         let i_sector_icc_1 = pk_sector.pow(&self.sk_icc_1_u);
         let i_sector_icc_2 = pk_sector.pow(&self.sk_icc_2_u);
-        SectorSpecificIdentifiers::new(i_sector_icc_1, i_sector_icc_2)
+        GroupSectorSpecificIdentifiers::new(i_sector_icc_1, i_sector_icc_2)
     }
 
-    pub fn signer<'pk, 'me: 'pk>(&'me self, pk_sector: &'pk PkSector<LIMBS, MOD>, use_identifier1: bool, use_identifier2: bool) -> PssSigner<'pk, LIMBS, MOD> {
+    pub fn signer<'pk, 'me: 'pk>(&'me self, pk_sector: &'pk PkSector<LIMBS, MOD>, use_identifier1: bool, use_identifier2: bool) -> GroupPssSigner<'pk, LIMBS, MOD> {
         let identifiers = self.sector_identifiers(pk_sector);
         let (i_sector_icc_1, i_sector_icc_2) = match (use_identifier1, use_identifier2) {
             (true, true) => (Some(identifiers.i_sector_icc_1), Some(identifiers.i_sector_icc_2)),
@@ -153,7 +155,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
             (false, true) => (None, Some(identifiers.i_sector_icc_2)),
             (false, false) => (None, None)
         };
-        PssSigner {
+        GroupPssSigner {
             g: &self.gpk.g,
             sk_icc_1_u: &self.sk_icc_1_u,
             sk_icc_2_u: &self.sk_icc_2_u,
@@ -164,7 +166,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         }
     }
 
-    pub fn valid_for_gpk(&self, group: &GroupManagerPublicKey<LIMBS, MOD>) -> bool {
+    pub fn valid_for_gpk(&self, group: &GroupGroupManagerPublicKey<LIMBS, MOD>) -> bool {
         // g^sk_icc_1_u * pk_m^sk_icc_2_u == pk_icc
         let part1 = group.g.pow(&self.sk_icc_1_u);
         let part2 = group.pk_m.pow(&self.sk_icc_2_u);
@@ -175,23 +177,23 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
 }
 
 #[derive(Clone, Debug)]
-pub struct GroupManagerPublicKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
+pub struct GroupGroupManagerPublicKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
     g: Residue<MOD, LIMBS>,
     pk_icc: Residue<MOD, LIMBS>,
     pk_m: Residue<MOD, LIMBS>
 }
 
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupManagerPublicKey<LIMBS, MOD>
+impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupGroupManagerPublicKey<LIMBS, MOD>
 where Uint<LIMBS>: Encoding {
     pub fn new(g: Residue<MOD, LIMBS>, pk_icc: Residue<MOD, LIMBS>, pk_m: Residue<MOD, LIMBS>) -> Self {
         Self { g, pk_icc, pk_m }
     }
 
-    pub fn check_signature(&self, message: &[u8], pk_sector: &PkSector<LIMBS, MOD>, signature: &PssSignature<LIMBS, MOD>) -> bool {
+    pub fn check_signature(&self, message: &[u8], pk_sector: &PkSector<LIMBS, MOD>, signature: &GroupPssSignature<LIMBS, MOD>) -> bool {
         self.recover_c(message, pk_sector, signature) == signature.c
     }
 
-    pub(crate) fn recover_c(&self, message: &[u8], pk_sector: &PkSector<LIMBS, MOD>, signature: &PssSignature<LIMBS, MOD>) -> Uint<LIMBS> {
+    pub(crate) fn recover_c(&self, message: &[u8], pk_sector: &PkSector<LIMBS, MOD>, signature: &GroupPssSignature<LIMBS, MOD>) -> Uint<LIMBS> {
         let pk_icc_c = self.pk_icc.pow(&signature.c);
         let g_s1 = self.g.pow(&signature.s1);
         let pk_m_s2 = self.pk_m.pow(&signature.s2);
@@ -230,16 +232,16 @@ where Uint<LIMBS>: Encoding {
 }
 
 #[derive(Debug)]
-pub struct GroupManager<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>>
+pub struct GroupGroupManager<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     sk_m: Uint<LIMBS>,
     sk_icc: Uint<LIMBS>,
-    gpk: GroupManagerPublicKey<LIMBS, MOD>,
+    gpk: GroupGroupManagerPublicKey<LIMBS, MOD>,
     sectors: Vec<(PkSector<LIMBS, MOD>, Option<Uint<LIMBS>>)>,
     _mod: PhantomData<MOD>
 }
 
-impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupManager<LIMBS, WIDE_LIMBS, MOD>
+impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupGroupManager<LIMBS, WIDE_LIMBS, MOD>
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     pub fn new(g: Residue<MOD, LIMBS>) -> Self {
         let sk_m = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
@@ -249,7 +251,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         // println!("g = {}, SK_m = {}, SK_icc = {}", g.retrieve(), sk_m, sk_icc);
         // println!("PK_m = g^SK_m = {}^{} = {}", g.retrieve(), sk_m, pk_m.retrieve());
         // println!("PK_icc = g^SK_icc = {}^{} = {}", g.retrieve(), sk_icc, pk_icc.retrieve());
-        let gpk = GroupManagerPublicKey::new(g, pk_icc, pk_m);
+        let gpk = GroupGroupManagerPublicKey::new(g, pk_icc, pk_m);
         Self { sk_m, sk_icc, gpk, sectors: Vec::new(), _mod: PhantomData }
     }
 
@@ -260,7 +262,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         sk_icc
     }
 
-    pub fn public_key(&self) -> &GroupManagerPublicKey<LIMBS, MOD> {
+    pub fn public_key(&self) -> &GroupGroupManagerPublicKey<LIMBS, MOD> {
         &self.gpk
     }
 
@@ -278,7 +280,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         pk_sector
     }
 
-    pub fn new_icc(&self) -> Icc<LIMBS, WIDE_LIMBS, MOD> {
+    pub fn new_icc(&self) -> GroupIcc<LIMBS, WIDE_LIMBS, MOD> {
         let sk_icc_2_u = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
         // SK_ICC_1 = SK_ICC - SK_M * SK_ICC_2
         let fermat_modulus = MOD::MODULUS.checked_sub(&Uint::from_u8(1)).unwrap();
@@ -287,7 +289,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
 
         // println!("SK_icc_2 = {}, fermat_modulus = {}", sk_icc_2_u, fermat_modulus);
         // println!("SK_icc_1 = SK_icc - SK_m * SK_icc_2 = {} - {} * {} = {} - {} = {}", self.sk_icc, self.sk_m, sk_icc_2_u, self.sk_icc, multiplication, sk_icc_1_u);
-        Icc::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
+        GroupIcc::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
     }
 
 }
@@ -309,7 +311,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut group_manager = GroupManager::new(DH_MODP_2048);
+        let mut group_manager = GroupGroupManager::new(DH_MODP_2048);
         let icc = group_manager.new_icc();
         let sector = group_manager.new_sector(false);
         let signer = icc.signer(&sector, true, true);
@@ -321,7 +323,7 @@ mod tests {
 
     #[test]
     fn valid_keys() {
-        let mut group_manager = GroupManager::new(DH_MODP_2048);
+        let mut group_manager = GroupGroupManager::new(DH_MODP_2048);
         let nym = group_manager.new_icc();
         assert!(nym.valid_for_gpk(group_manager.public_key()));
 
