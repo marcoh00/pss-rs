@@ -6,9 +6,10 @@ pub trait GroupManager: Into<GenericGroupManagerPrivateKey> {
     type PublicKey;
     type GroupManagerPublicKey: GroupManagerPublicKey;
     type Icc: Icc;
+    type Base;
 
-    fn new() -> Self where Self: Sized;
-    fn new_from_secret_parts(sk_m: Self::SecretKey, sk_icc: Self::SecretKey) -> Self;
+    fn new(g: Option<Self::Base>) -> Self where Self: Sized;
+    fn new_from_secret_parts(sk_m: Self::SecretKey, sk_icc: Self::SecretKey, g: Option<Self::Base>) -> Self;
     fn renew_icc(&mut self) -> Self::SecretKey;
     fn new_icc(&self) -> Self::Icc;
     fn new_sector(&mut self, deanonymizable: bool) -> Self::PublicKey;
@@ -41,8 +42,9 @@ pub trait PssSigner {
 pub trait GroupManagerPublicKey: Into<GenericGroupManagerPublicKey> {
     type PublicKey;
     type Signature: PssSignature;
+    type Base;
 
-    fn new(pk_m: Self::PublicKey, pk_icc: Self::PublicKey) -> Self where Self: Sized;
+    fn new(pk_m: Self::PublicKey, pk_icc: Self::PublicKey, _g: Option<Self::Base>) -> Self where Self: Sized;
     fn check_signature(&self, message: &[u8], pk_sector: &Self::PublicKey, signature: &Self::Signature) -> bool;
 
     fn from_generic_gpk(gpk: GenericGroupManagerPublicKey, g: Option<Box<[u8]>>) -> Self;

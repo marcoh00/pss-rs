@@ -3,7 +3,7 @@ use crate::{GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, Generic
 use crypto_bigint::{generic_array::{sequence::GenericSequence, GenericArray}, rand_core::OsRng};
 use k256::{elliptic_curve::{hash2curve::FromOkm, sec1::ToEncodedPoint, PrimeField, ScalarPrimitive}, AffinePoint, PublicKey, Scalar, SecretKey};
 use sha3::{digest::OutputSizeUser, Digest};
-use std::ops::{Add, Mul, Sub};
+use std::{marker::PhantomData, ops::{Add, Mul, Sub}};
 
 const ID_DSI: &[u8] = b"TODO replace with algorithm id";
 
@@ -249,17 +249,18 @@ impl GroupManager for EccGroupManager {
     type PublicKey = PublicKey;
     type GroupManagerPublicKey = EccGroupManagerPublicKey;
     type Icc = EccIcc;
+    type Base = EccGroupManagerBaseIsImplicitInCurve;
     
-    fn new() -> Self {
+    fn new(_g: Option<Self::Base>) -> Self {
         let sk_m = SecretKey::random(&mut OsRng::default());
         let sk_icc = SecretKey::random(&mut OsRng::default());
-        Self::new_from_secret_parts(sk_m, sk_icc)
+        Self::new_from_secret_parts(sk_m, sk_icc, _g)
     }
 
-    fn new_from_secret_parts(sk_m: Self::SecretKey, sk_icc: Self::SecretKey) -> Self {
+    fn new_from_secret_parts(sk_m: Self::SecretKey, sk_icc: Self::SecretKey, _g: Option<Self::Base>) -> Self {
         let pk_m = sk_m.public_key();
         let pk_icc = sk_icc.public_key();
-        let gpk = EccGroupManagerPublicKey::new(pk_m, pk_icc);
+        let gpk = EccGroupManagerPublicKey::new(pk_m, pk_icc, None);
         let sectors = Vec::new();
         Self { sk_m, sk_icc, gpk, sectors }
     }
@@ -299,7 +300,7 @@ impl GroupManager for EccGroupManager {
     }
     
     fn from_generic_secret_key(secret_key: crate::GenericGroupManagerPrivateKey, _g: Option<Box<[u8]>>) -> Self {
-        Self::new_from_secret_parts(SecretKey::from_slice(&secret_key.sk_m).unwrap(), SecretKey::from_slice(&secret_key.sk_icc).unwrap())
+        Self::new_from_secret_parts(SecretKey::from_slice(&secret_key.sk_m).unwrap(), SecretKey::from_slice(&secret_key.sk_icc).unwrap(), None)
     }
 }
 
@@ -318,11 +319,14 @@ pub struct EccGroupManagerPublicKey {
     pk_icc: PublicKey
 }
 
+pub struct EccGroupManagerBaseIsImplicitInCurve();
+
 impl GroupManagerPublicKey for EccGroupManagerPublicKey {
     type PublicKey = PublicKey;
     type Signature = EccPssSignature;
+    type Base = PhantomData<EccGroupManagerBaseIsImplicitInCurve>;
 
-    fn new(pk_m: Self::PublicKey, pk_icc: Self::PublicKey) -> Self {
+    fn new(pk_m: Self::PublicKey, pk_icc: Self::PublicKey, _g: Option<Self::Base>) -> Self {
         Self { pk_m, pk_icc }
     }
 
@@ -388,7 +392,7 @@ mod tests {
 
     #[test]
     fn valid_keys() {
-        let mut group_manager = EccGroupManager::new();
+        let mut group_manager = EccGroupManager::new(None);
         let nym = group_manager.new_icc();
         assert!(nym.valid_for_gpk(group_manager.public_key()));
 
@@ -398,7 +402,7 @@ mod tests {
 
     #[test]
     fn valid_signature() {
-        let mut group_manager = EccGroupManager::new();
+        let mut group_manager = EccGroupManager::new(None);
         let icc = group_manager.new_icc();
         let sector = group_manager.new_sector(false);
 
@@ -412,7 +416,7 @@ mod tests {
 
     #[test]
     fn invalid_signature() {
-        let mut group_manager = EccGroupManager::new();
+        let mut group_manager = EccGroupManager::new(None);
         let nym = group_manager.new_icc();
         let sector = group_manager.new_sector(false);
 
