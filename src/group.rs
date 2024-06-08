@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crypto_bigint::{const_residue, generic_array::GenericArray, impl_modulus, modular::{constant_mod::{Residue, ResidueParams}, Retrieve}, rand_core::OsRng, ArrayDecoding, CheckedSub, ConcatMixed, Encoding, NonZero, RandomMod, SplitMixed, Uint, U2048, U64};
+use crypto_bigint::{const_residue, generic_array::GenericArray, impl_modulus, modular::constant_mod::{Residue, ResidueParams}, rand_core::OsRng, ArrayDecoding, CheckedSub, ConcatMixed, Encoding, NonZero, RandomMod, SplitMixed, Uint, U2048, U64};
 use sha3::{digest::OutputSizeUser, Digest};
 
 use crate::{GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
@@ -457,15 +457,48 @@ mod tests {
     const SIGN_MESSAGE: &[u8] = b"TEST MESSAGE";
 
     #[test]
-    fn it_works() {
+    fn valid_signature() {
         let mut group_manager = GroupGroupManager::new(Some(DH_MODP_2048));
         let icc = group_manager.new_icc();
         let sector = group_manager.new_sector(false);
-        let signer = icc.signer(&sector, true, true);
-        let signature = signer.sign(SIGN_MESSAGE);
-        let valid = group_manager.public_key().check_signature(SIGN_MESSAGE, &sector, &signature);
 
-        assert!(valid)
+        let combinations = vec![(true, true), (true, false), (false, true), (false, false)];
+        for (id1, id2) in combinations {
+            let signer = icc.signer(&sector, id1, id2);
+            let signature = signer.sign(SIGN_MESSAGE);
+            assert!(group_manager.public_key().check_signature(SIGN_MESSAGE, &sector, &signature));
+        }
+    }
+
+    #[test]
+    fn invalid_signature() {
+        let mut group_manager = GroupGroupManager::new(Some(DH_MODP_2048));
+        let nym = group_manager.new_icc();
+        let sector = group_manager.new_sector(false);
+
+        let combinations = vec![(true, true), (true, false), (false, true), (false, false)];
+        for (id1, id2) in combinations {
+            let signer = nym.signer(&sector, id1, id2);
+            let signature = signer.sign(SIGN_MESSAGE);
+            fn tamper_with<const LIMBS: usize, MOD: ResidueParams<LIMBS>>(signature: &mut GroupPssSignature<LIMBS, MOD>, c: bool, s1: bool, s2: bool)
+            where Uint<LIMBS> : Encoding {
+                if c {
+                    signature.c = signature.c.wrapping_sub(&Uint::from_u8(1));
+                }
+                if s1 {
+                    signature.s1 = signature.s1.wrapping_sub(&Uint::from_u8(1));
+                }
+                if s2 {
+                    signature.s2 = signature.s2.wrapping_sub(&Uint::from_u8(1));
+                }
+            }
+            let combinations = vec![(true, true, true), (true, true, false), (true, false, true), (true, false, false), (false, true, true), (false, true, false), (false, false, true)];
+            for (c, s1, s2) in combinations {
+                let mut signature_to_tamper_with = signature.clone();
+                tamper_with(&mut signature_to_tamper_with, c, s1, s2);
+                assert!(!group_manager.public_key().check_signature(SIGN_MESSAGE, &sector, &signature_to_tamper_with), "signature was tampered with but still valid! c={} s1={} s2={}", c, s1, s2);
+            }
+        }
     }
 
     #[test]
