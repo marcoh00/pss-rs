@@ -223,6 +223,7 @@ name = "pss"
 version = "0.1.0"
 dependencies = [
  "crypto-bigint",
+ "elliptic-curve",
  "k256",
  "sha3",
 ]

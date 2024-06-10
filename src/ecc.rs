@@ -1,13 +1,15 @@
-use crate::{GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
+use crate::{mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
 
-use crypto_bigint::{generic_array::{sequence::GenericSequence, GenericArray}, rand_core::OsRng};
-use k256::{elliptic_curve::{hash2curve::FromOkm, sec1::ToEncodedPoint, PrimeField, ScalarPrimitive}, AffinePoint, PublicKey, Scalar, SecretKey};
+use crypto_bigint::{generic_array::{sequence::GenericSequence, GenericArray}, rand_core::OsRng, ConcatMixed, Uint};
+use elliptic_curve::{point::PointCompression, sec1::{FromEncodedPoint, ModulusSize}, Curve, CurveArithmetic, PublicKey, SecretKey};
+use k256::elliptic_curve::{hash2curve::FromOkm, sec1::ToEncodedPoint, PrimeField, ScalarPrimitive};
 use sha3::{digest::OutputSizeUser, Digest};
 use std::{marker::PhantomData, ops::{Add, Mul, Sub}};
 
 const ID_DSI: &[u8] = b"TODO replace with algorithm id";
 
-fn signature_hash(q: &AffinePoint, a1_i_sector_icc_1: Option<(AffinePoint, &PublicKey)>, a2_i_sector_icc_2: Option<(AffinePoint, &PublicKey)>, pk_sector: &PublicKey, message: &[u8]) -> GenericArray<u8, <sha3::Keccak256 as OutputSizeUser>::OutputSize> {
+fn signature_hash<C: Curve + CurveArithmetic>(q: &C::AffinePoint, a1_i_sector_icc_1: Option<(C::AffinePoint, &PublicKey<C>)>, a2_i_sector_icc_2: Option<(C::AffinePoint, &PublicKey<C>)>, pk_sector: &PublicKey<C>, message: &[u8]) -> GenericArray<u8, <sha3::Keccak256 as OutputSizeUser>::OutputSize>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
     let mut c_message_buffer = Vec::new();
     c_message_buffer.extend_from_slice(q.to_encoded_point(true).as_bytes());
     if let Some((a1, i_sector_icc_1)) = a1_i_sector_icc_1 {
@@ -37,31 +39,33 @@ fn hash2curve<S: FromOkm>(hash: &[u8]) -> S {
     S::from_okm(&array_fitting_length)
 }
 
-pub struct SectorSpecificIdentifiers {
-    i_sector_icc_1: PublicKey,
-    i_sector_icc_2: PublicKey
+pub struct SectorSpecificIdentifiers<C: Curve + CurveArithmetic> {
+    i_sector_icc_1: PublicKey<C>,
+    i_sector_icc_2: PublicKey<C>
 }
 
-impl SectorSpecificIdentifiers {
-    pub fn new(i_sector_icc_1: PublicKey, i_sector_icc_2: PublicKey) -> Self {
+impl<C: Curve + CurveArithmetic> SectorSpecificIdentifiers<C> {
+    pub fn new(i_sector_icc_1: PublicKey<C>, i_sector_icc_2: PublicKey<C>) -> Self {
         Self { i_sector_icc_1, i_sector_icc_2 }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct EccPssSignature {
-    c: Scalar,
-    s1: Scalar,
-    s2: Scalar,
-    pseudonyms: (Option<PublicKey>, Option<PublicKey>)
+pub struct EccPssSignature<C: Curve + CurveArithmetic>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
+    c: C::Scalar,
+    s1: C::Scalar,
+    s2: C::Scalar,
+    pseudonyms: (Option<PublicKey<C>>, Option<PublicKey<C>>)
 }
 
-impl Into<GenericPssSignature> for EccPssSignature {
+impl<C: Curve + CurveArithmetic> Into<GenericPssSignature> for EccPssSignature<C>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
     fn into(self) -> GenericPssSignature {
         GenericPssSignature {
-            c: self.c.to_bytes().as_slice().into(),
-            s1: self.s1.to_bytes().as_slice().into(),
-            s2: self.s2.to_bytes().as_slice().into(),
+            c: self.c.to_repr().as_slice().into(),
+            s1: self.s1.to_repr().as_slice().into(),
+            s2: self.s2.to_repr().as_slice().into(),
             pseudonym1: self.pseudonyms.0.map(|pk| pk.to_encoded_point(true).to_bytes()),
             pseudonym2: self.pseudonyms.1.map(|pk| pk.to_encoded_point(true).to_bytes())
             
@@ -69,12 +73,13 @@ impl Into<GenericPssSignature> for EccPssSignature {
     }
 }
 
-impl TryFrom<GenericPssSignature> for EccPssSignature {
+impl<C: Curve + CurveArithmetic> TryFrom<GenericPssSignature> for EccPssSignature<C>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
     type Error = ();
     fn try_from(value: GenericPssSignature) -> Result<Self, Self::Error> {
-        let c = Scalar::from_repr(*GenericArray::from_slice(&value.c)).unwrap();
-        let s1 = Scalar::from_repr(*GenericArray::from_slice(&value.s1)).unwrap();
-        let s2 = Scalar::from_repr(*GenericArray::from_slice(&value.s2)).unwrap();
+        let c = C::Scalar::from_repr(GenericArray::clone_from_slice(&value.c)).unwrap();
+        let s1 = C::Scalar::from_repr(GenericArray::clone_from_slice(&value.s1)).unwrap();
+        let s2 = C::Scalar::from_repr(GenericArray::clone_from_slice(&value.s2)).unwrap();
 
         let pseudonyms = (
             value.pseudonym1.map(|spoint| PublicKey::from_sec1_bytes(spoint.as_ref()).unwrap()),
@@ -86,9 +91,10 @@ impl TryFrom<GenericPssSignature> for EccPssSignature {
     }
 }
 
-impl PssSignature for EccPssSignature {
-    type PublicKey = PublicKey;
-    type Scalar = Scalar;
+impl<C: Curve + CurveArithmetic> PssSignature for EccPssSignature<C>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
+    type PublicKey = PublicKey<C>;
+    type Scalar = C::Scalar;
 
     fn c(&self) -> &Self::Scalar {
         &self.c
@@ -112,41 +118,49 @@ impl PssSignature for EccPssSignature {
 }
 
 #[derive(Debug)]
-pub struct EccPssSigner<'a> {
-    sk_icc_1_u: &'a SecretKey,
-    sk_icc_2_u: &'a SecretKey,
-    pk_sector: &'a PublicKey,
-    pk_m: &'a PublicKey,
-    i_sector_icc_1: Option<PublicKey>,
-    i_sector_icc_2: Option<PublicKey>,
+pub struct EccPssSigner<'a, C: Curve + CurveArithmetic>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize  {
+    sk_icc_1_u: &'a SecretKey<C>,
+    sk_icc_2_u: &'a SecretKey<C>,
+    pk_sector: &'a PublicKey<C>,
+    pk_m: &'a PublicKey<C>,
+    i_sector_icc_1: Option<PublicKey<C>>,
+    i_sector_icc_2: Option<PublicKey<C>>,
 }
 
-impl<'a> PssSigner for EccPssSigner<'a> {
-    type PssSignature = EccPssSignature;
+impl<'a, C: Curve + CurveArithmetic> PssSigner for EccPssSigner<'a, C>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize, C::Scalar: FromOkm {
+    type PssSignature = EccPssSignature<C>;
     
     fn sign(&self, message: &[u8]) -> Self::PssSignature {
-        let k1 = SecretKey::random(&mut OsRng::default());
-        let k2 = SecretKey::random(&mut OsRng::default());
+        let k1: SecretKey<C> = SecretKey::random(&mut OsRng::default());
+        let k2: SecretKey<C> = SecretKey::random(&mut OsRng::default());
 
-        let q1_part = self.pk_m.to_projective().mul(Scalar::from(k2.as_scalar_primitive()));
-        let q1 = k1.public_key().to_projective().add(&q1_part).to_affine();
+        let k1_scalar: C::Scalar = k1.as_scalar_primitive().to_owned().into();
+        let k2_scalar: C::Scalar = k2.as_scalar_primitive().to_owned().into();
+
+        let q1_part: C::ProjectivePoint = self.pk_m.to_projective().mul(&k2_scalar);
+        let q1: C::AffinePoint = k1.public_key().to_projective().add(&q1_part).into();
 
         let pk_sector_proj = self.pk_sector.to_projective();
 
         let pseudonym1 = match self.i_sector_icc_1 {
-            Some(ref pubkey) => Some((pk_sector_proj.mul(Scalar::from(k1.as_scalar_primitive())).to_affine(), pubkey)),
+            Some(ref pubkey) => Some((pk_sector_proj.mul(&k1_scalar).into(), pubkey)),
             None => None
         };
         let pseudonym2 = match self.i_sector_icc_2 {
-            Some(ref pubkey) => Some((pk_sector_proj.mul(Scalar::from(k2.as_scalar_primitive())).to_affine(), pubkey)),
+            Some(ref pubkey) => Some((pk_sector_proj.mul(&k2_scalar).into(), pubkey)),
             None => None
         };
 
         let c_bin = signature_hash(&q1, pseudonym1, pseudonym2, &self.pk_sector, message);
-        let c: Scalar = hash2curve(&c_bin);
+        let c: C::Scalar = hash2curve(&c_bin);
 
-        let s1 = Scalar::from(k1.as_scalar_primitive()).sub(c.mul(Scalar::from(self.sk_icc_1_u.as_scalar_primitive())));
-        let s2 = Scalar::from(k2.as_scalar_primitive()).sub(c.mul(Scalar::from(self.sk_icc_2_u.as_scalar_primitive())));
+        let sk_icc_1_u_scalar: C::Scalar = self.sk_icc_1_u.as_scalar_primitive().to_owned().into();
+        let sk_icc_2_u_scalar: C::Scalar = self.sk_icc_2_u.as_scalar_primitive().to_owned().into();
+
+        let s1 = k1_scalar.sub(c.mul(sk_icc_1_u_scalar));
+        let s2 = k2_scalar.sub(c.mul(sk_icc_2_u_scalar));
 
         EccPssSignature {
             c,
@@ -161,39 +175,44 @@ impl<'a> PssSigner for EccPssSigner<'a> {
 }
 
 #[derive(Debug)]
-pub struct EccIcc {
-    gpk: EccGroupManagerPublicKey,
-    sk_icc_1_u: SecretKey,
-    sk_icc_2_u: SecretKey
+pub struct EccIcc<C: Curve + CurveArithmetic>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize, C::Scalar: FromOkm {
+    gpk: EccGroupManagerPublicKey<C>,
+    sk_icc_1_u: SecretKey<C>,
+    sk_icc_2_u: SecretKey<C>
 }
 
-impl Icc for EccIcc {
-    type GroupManagerPublicKey = EccGroupManagerPublicKey;
-    type SecretKey = SecretKey;
-    type SectorSpecificIdentifiers = SectorSpecificIdentifiers;
-    type PublicKey = PublicKey;
-    type Signer<'a> = EccPssSigner<'a>;
+impl<C: Curve + CurveArithmetic> Icc for EccIcc<C>
+where C: PointCompression, C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize, C::Scalar: FromOkm {
+    type GroupManagerPublicKey = EccGroupManagerPublicKey<C>;
+    type SecretKey = SecretKey<C>;
+    type SectorSpecificIdentifiers = SectorSpecificIdentifiers<C>;
+    type PublicKey = PublicKey<C>;
+    type Signer<'a> = EccPssSigner<'a, C>;
 
-    fn new(gpk: Self::GroupManagerPublicKey, sk_icc_1_u: SecretKey, sk_icc_2_u: SecretKey) -> Self {
+    fn new(gpk: Self::GroupManagerPublicKey, sk_icc_1_u: Self::SecretKey, sk_icc_2_u: Self::SecretKey) -> Self {
         let nym = Self { gpk, sk_icc_1_u, sk_icc_2_u };
         assert!(nym.valid_for_gpk(&nym.gpk));
         nym
     }
 
     fn valid_for_gpk(&self, gpk: &Self::GroupManagerPublicKey) -> bool {
+        let sk_icc_2_u_scalar: C::Scalar = self.sk_icc_2_u.as_scalar_primitive().to_owned().into();
         let pk_icc_1_u = self.sk_icc_1_u.public_key().to_projective();
-        let pk_icc_2_u = gpk.pk_m.to_projective().mul(Scalar::from(self.sk_icc_2_u.as_scalar_primitive()));
+        let pk_icc_2_u = gpk.pk_m.to_projective().mul(&sk_icc_2_u_scalar);
         let result = pk_icc_1_u + pk_icc_2_u;
-        &result.to_affine() == gpk.pk_icc.as_affine()
+        &result.into() == gpk.pk_icc.as_affine()
     }
 
-    fn sector_identifiers(&self, pk_sector: &PublicKey) -> SectorSpecificIdentifiers {
-        let i_sector_icc_1 = PublicKey::from_affine(pk_sector.to_projective().mul(Scalar::from(self.sk_icc_1_u.as_scalar_primitive())).to_affine()).unwrap();
-        let i_sector_icc_2 = PublicKey::from_affine(pk_sector.to_projective().mul(Scalar::from(self.sk_icc_2_u.as_scalar_primitive())).to_affine()).unwrap();
+    fn sector_identifiers(&self, pk_sector: &Self::PublicKey) -> Self::SectorSpecificIdentifiers {
+        let sk_icc_1_u_scalar: C::Scalar = self.sk_icc_1_u.as_scalar_primitive().to_owned().into();
+        let sk_icc_2_u_scalar: C::Scalar = self.sk_icc_2_u.as_scalar_primitive().to_owned().into();
+        let i_sector_icc_1 = PublicKey::from_affine(pk_sector.to_projective().mul(&sk_icc_1_u_scalar).into()).unwrap();
+        let i_sector_icc_2 = PublicKey::from_affine(pk_sector.to_projective().mul(&sk_icc_2_u_scalar).into()).unwrap();
         SectorSpecificIdentifiers::new(i_sector_icc_1, i_sector_icc_2)
     }
 
-    fn signer<'a>(&'a self, pk_sector: &'a PublicKey, use_identifier1: bool, use_identifier2: bool) -> <Self as Icc>::Signer<'a> {
+    fn signer<'a>(&'a self, pk_sector: &'a Self::PublicKey, use_identifier1: bool, use_identifier2: bool) -> <Self as Icc>::Signer<'a> {
         let identifiers = self.sector_identifiers(pk_sector);
         let (i_sector_icc_1, i_sector_icc_2) = match (use_identifier1, use_identifier2) {
             (true, true) => (Some(identifiers.i_sector_icc_1), Some(identifiers.i_sector_icc_2)),
@@ -221,34 +240,37 @@ impl Icc for EccIcc {
 }
 
 
-impl From<EccIcc> for GenericIccSecretKey {
-    fn from(value: EccIcc) -> Self {
+impl<C: Curve + CurveArithmetic> From<EccIcc<C>> for GenericIccSecretKey
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize, C::Scalar: FromOkm {
+    fn from(value: EccIcc<C>) -> Self {
         Self { sk_icc_1_u: value.sk_icc_1_u.to_bytes().as_slice().into(), sk_icc_2_u: value.sk_icc_2_u.to_bytes().as_slice().into() }
     }
 }
 
 #[derive(Debug)]
-pub struct SectorKey(SecretKey);
+pub struct SectorKey<C: Curve + CurveArithmetic>(SecretKey<C>);
 
-impl SectorKey {
-    pub fn public_key(&self) -> PublicKey {
+impl<C: Curve + CurveArithmetic> SectorKey<C> {
+    pub fn public_key(&self) -> PublicKey<C> {
         self.0.public_key()
     }
 }
 
 #[derive(Debug)]
-pub struct EccGroupManager {
-    sk_m: SecretKey,
-    sk_icc: SecretKey,
-    gpk: EccGroupManagerPublicKey,
-    sectors: Vec<(PublicKey, Option<SectorKey>)>
+pub struct EccGroupManager<const LIMBS: usize, const WIDE_LIMBS: usize, C: Curve<Uint = Uint<LIMBS>>>
+where C: Curve + CurveArithmetic, C::Scalar: FromOkm, Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>> {
+    sk_m: SecretKey<C>,
+    sk_icc: SecretKey<C>,
+    gpk: EccGroupManagerPublicKey<C>,
+    sectors: Vec<(PublicKey<C>, Option<SectorKey<C>>)>
 }
 
-impl GroupManager for EccGroupManager {
-    type SecretKey = SecretKey;
-    type PublicKey = PublicKey;
-    type GroupManagerPublicKey = EccGroupManagerPublicKey;
-    type Icc = EccIcc;
+impl<const LIMBS: usize, const WIDE_LIMBS: usize, C: Curve<Uint = Uint<LIMBS>>> GroupManager for EccGroupManager<LIMBS, WIDE_LIMBS, C>
+where C: Curve + CurveArithmetic + PointCompression, C::Scalar: FromOkm, C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize, Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>> {
+    type SecretKey = SecretKey<C>;
+    type PublicKey = PublicKey<C>;
+    type GroupManagerPublicKey = EccGroupManagerPublicKey<C>;
+    type Icc = EccIcc<C>;
     type Base = EccGroupManagerBaseIsImplicitInCurve;
     
     fn new(_g: Option<Self::Base>) -> Self {
@@ -265,27 +287,27 @@ impl GroupManager for EccGroupManager {
         Self { sk_m, sk_icc, gpk, sectors }
     }
 
-    fn renew_icc(&mut self) -> SecretKey {
+    fn renew_icc(&mut self) -> Self::SecretKey {
         let mut sk_icc = SecretKey::random(&mut OsRng::default());
         self.gpk.pk_icc = sk_icc.public_key();
         std::mem::swap(&mut self.sk_icc, &mut sk_icc);
         sk_icc
     }
 
-    fn new_icc(&self) -> EccIcc {
+    fn new_icc(&self) -> EccIcc<C> {
         let sk_icc_2_u = SecretKey::random(&mut OsRng::default());
-        let sk_icc_2_u_scalar = Scalar::from(sk_icc_2_u.as_scalar_primitive());
-        let sk_m_scalar = Scalar::from(self.sk_m.as_scalar_primitive());
-        let sk_icc_scalar = Scalar::from(self.sk_icc.as_scalar_primitive());
+        let sk_icc_2_u_scalar = sk_icc_2_u.as_scalar_primitive().as_uint();
+        let sk_m_scalar = self.sk_m.as_scalar_primitive().as_uint();
+        let sk_icc_scalar = self.sk_icc.as_scalar_primitive();
 
         // SK_ICC_1 = SK_ICC - SK_M * SK_ICC_2
-        let multiplication = sk_m_scalar.mul(&sk_icc_2_u_scalar);
+        let multiplication = ScalarPrimitive::new(mul_mod(&sk_m_scalar, &sk_icc_2_u_scalar, &C::ORDER)).unwrap();
         let sk_icc_1_u_scalar = sk_icc_scalar.sub(&multiplication);
-        let sk_icc_1_u = SecretKey::new(ScalarPrimitive::from(&sk_icc_1_u_scalar));
+        let sk_icc_1_u = SecretKey::new(sk_icc_1_u_scalar);
         EccIcc::new(self.gpk.clone(), sk_icc_1_u, sk_icc_2_u)
     }
 
-    fn new_sector(&mut self, deanonymizable: bool) -> PublicKey {
+    fn new_sector(&mut self, deanonymizable: bool) -> Self::PublicKey {
         let key = SectorKey(SecretKey::random(&mut OsRng::default()));
         let pubkey = key.public_key();
         self.sectors.push((pubkey.clone(), match deanonymizable {
@@ -295,7 +317,7 @@ impl GroupManager for EccGroupManager {
         pubkey
     }
 
-    fn public_key(&self) -> &EccGroupManagerPublicKey {
+    fn public_key(&self) -> &Self::GroupManagerPublicKey {
         &self.gpk
     }
     
@@ -304,8 +326,9 @@ impl GroupManager for EccGroupManager {
     }
 }
 
-impl From<EccGroupManager> for GenericGroupManagerPrivateKey {
-    fn from(value: EccGroupManager) -> Self {
+impl<const LIMBS: usize, const WIDE_LIMBS: usize, C: Curve<Uint = Uint<LIMBS>>> From<EccGroupManager<LIMBS, WIDE_LIMBS, C>> for GenericGroupManagerPrivateKey
+where C: Curve + CurveArithmetic, C::Scalar: FromOkm, Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>> {
+    fn from(value: EccGroupManager<LIMBS, WIDE_LIMBS, C>) -> Self {
         Self {
             sk_m: value.sk_m.to_bytes().as_slice().into(),
             sk_icc: value.sk_icc.to_bytes().as_slice().into()
@@ -314,16 +337,17 @@ impl From<EccGroupManager> for GenericGroupManagerPrivateKey {
 }
 
 #[derive(Debug, Clone)]
-pub struct EccGroupManagerPublicKey {
-    pk_m: PublicKey,
-    pk_icc: PublicKey
+pub struct EccGroupManagerPublicKey<C: Curve + CurveArithmetic> {
+    pk_m: PublicKey<C>,
+    pk_icc: PublicKey<C>
 }
 
 pub struct EccGroupManagerBaseIsImplicitInCurve();
 
-impl GroupManagerPublicKey for EccGroupManagerPublicKey {
-    type PublicKey = PublicKey;
-    type Signature = EccPssSignature;
+impl<C: Curve + CurveArithmetic> GroupManagerPublicKey for EccGroupManagerPublicKey<C>
+where C: PointCompression, C::FieldBytesSize: ModulusSize, C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::Scalar: FromOkm {
+    type PublicKey = PublicKey<C>;
+    type Signature = EccPssSignature<C>;
     type Base = PhantomData<EccGroupManagerBaseIsImplicitInCurve>;
 
     fn new(pk_m: Self::PublicKey, pk_icc: Self::PublicKey, _g: Option<Self::Base>) -> Self {
@@ -341,24 +365,28 @@ impl GroupManagerPublicKey for EccGroupManagerPublicKey {
     }
 }
 
-impl From<EccGroupManagerPublicKey> for GenericGroupManagerPublicKey {
-    fn from(value: EccGroupManagerPublicKey) -> Self {
+impl<C: Curve + CurveArithmetic> From<EccGroupManagerPublicKey<C>> for GenericGroupManagerPublicKey
+where C: PointCompression, C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
+    fn from(value: EccGroupManagerPublicKey<C>) -> Self {
         Self { pk_m: value.pk_m.to_sec1_bytes(), pk_icc: value.pk_icc.to_sec1_bytes() }
     }
 }
 
-impl EccGroupManagerPublicKey {
-    pub(crate) fn recover_c(&self, message: &[u8], pk_sector: &PublicKey, signature: &EccPssSignature) -> Scalar {
+impl<C: Curve + CurveArithmetic> EccGroupManagerPublicKey<C>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize, C::Scalar: FromOkm {
+    pub(crate) fn recover_c(&self, message: &[u8], pk_sector: &PublicKey<C>, signature: &EccPssSignature<C>) -> C::Scalar {
         let q1s1 = self.pk_icc.to_projective().mul(signature.c);
-        let q1s2 = SecretKey::new(ScalarPrimitive::from(&signature.s1)).public_key().to_projective();
+        //let q1s2 = SecretKey::new(signature.s1.into::<ScalarPrimitive<C>>()).public_key().to_projective();
+        let s1_scalar: ScalarPrimitive<C> = signature.s1.into();
+        let q1s2 = SecretKey::new(s1_scalar).public_key().to_projective();
         let q1s3 = self.pk_m.to_projective().mul(signature.s2);
-        let q1 = q1s1.add(&q1s2).add(&q1s3).to_affine();
+        let q1: C::AffinePoint = q1s1.add(&q1s2).add(&q1s3).into();
 
         let pseudonym1 = match signature.pseudonyms.0 {
             Some(ref pubkey) => {
                 let sector_c = pubkey.to_projective().mul(signature.c);
                 let pk_s = pk_sector.to_projective().mul(signature.s1);
-                let a1 = sector_c.add(&pk_s).to_affine();
+                let a1: C::AffinePoint = sector_c.add(&pk_s).into();
                 Some((a1, pubkey))
             },
             None => None,
@@ -367,14 +395,14 @@ impl EccGroupManagerPublicKey {
             Some(ref pubkey) => {
                 let sector_c = pubkey.to_projective().mul(signature.c);
                 let pk_s = pk_sector.to_projective().mul(signature.s2);
-                let a2 = sector_c.add(&pk_s).to_affine();
+                let a2: C::AffinePoint = sector_c.add(&pk_s).into();
                 Some((a2, pubkey))
             },
             None => None,
         };
 
         let c_bytes = signature_hash(&q1, pseudonym1, pseudonym2, pk_sector, message);
-        let c: Scalar = hash2curve(&c_bytes);
+        let c = hash2curve(&c_bytes);
 
         c
     }
@@ -382,9 +410,12 @@ impl EccGroupManagerPublicKey {
 
 #[cfg(test)]
 mod tests {
-    use k256::Scalar;
+    use std::ops::Sub;
 
-    use crate::{ecc::EccPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSigner};
+    use elliptic_curve::{sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint}, Curve, CurveArithmetic, ScalarPrimitive};
+    use k256::Secp256k1;
+
+    use crate::{ecc::{EccIcc, EccPssSignature}, GroupManager, GroupManagerPublicKey, Icc, PssSigner};
 
     use super::EccGroupManager;
 
@@ -393,17 +424,17 @@ mod tests {
     #[test]
     fn valid_keys() {
         let mut group_manager = EccGroupManager::new(None);
-        let nym = group_manager.new_icc();
-        assert!(nym.valid_for_gpk(group_manager.public_key()));
+        let icc: EccIcc<Secp256k1> = group_manager.new_icc();
+        assert!(icc.valid_for_gpk(group_manager.public_key()));
 
         let _ = group_manager.renew_icc();
-        assert!(!nym.valid_for_gpk(group_manager.public_key()));
+        assert!(!icc.valid_for_gpk(group_manager.public_key()));
     }
 
     #[test]
     fn valid_signature() {
         let mut group_manager = EccGroupManager::new(None);
-        let icc = group_manager.new_icc();
+        let icc: EccIcc<Secp256k1> = group_manager.new_icc();
         let sector = group_manager.new_sector(false);
 
         let combinations = vec![(true, true), (true, false), (false, true), (false, false)];
@@ -417,22 +448,23 @@ mod tests {
     #[test]
     fn invalid_signature() {
         let mut group_manager = EccGroupManager::new(None);
-        let nym = group_manager.new_icc();
+        let icc: EccIcc<Secp256k1> = group_manager.new_icc();
         let sector = group_manager.new_sector(false);
 
         let combinations = vec![(true, true), (true, false), (false, true), (false, false)];
         for (id1, id2) in combinations {
-            let signer = nym.signer(&sector, id1, id2);
+            let signer = icc.signer(&sector, id1, id2);
             let signature = signer.sign(SIGN_MESSAGE);
-            fn tamper_with(signature: &mut EccPssSignature, c: bool, s1: bool, s2: bool) {
+            fn tamper_with<C: Curve + CurveArithmetic>(signature: &mut EccPssSignature<C>, c: bool, s1: bool, s2: bool)
+            where C::AffinePoint: ToEncodedPoint<C> + FromEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
                 if c {
-                    signature.c = signature.c.sub(&Scalar::from(1u32));
+                    signature.c = signature.c.sub(&ScalarPrimitive::new(C::Uint::from(1u64)).unwrap().into());
                 }
                 if s1 {
-                    signature.s1 = signature.s1.sub(&Scalar::from(1u32));
+                    signature.s1 = signature.s1.sub(&ScalarPrimitive::new(C::Uint::from(1u64)).unwrap().into());
                 }
                 if s2 {
-                    signature.s2 = signature.s2.sub(&Scalar::from(1u32));
+                    signature.s2 = signature.s2.sub(&ScalarPrimitive::new(C::Uint::from(1u64)).unwrap().into());
                 }
             }
             let combinations = vec![(true, true, true), (true, true, false), (true, false, true), (true, false, false), (false, true, true), (false, true, false), (false, false, true)];
