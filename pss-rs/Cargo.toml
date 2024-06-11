@@ -1,0 +1,11 @@
+[package]
+name = "pss-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+crypto-bigint = "0.5.5"
+elliptic-curve = { version = "0.13.8", features = ["arithmetic"] }
+k256 = { version = "0.13.3", features = ["hash2curve"] }
+sha3 = "0.10.8"
