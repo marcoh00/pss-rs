@@ -1,7 +1,15 @@
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
+
 use crypto_bigint::{ConcatMixed, NonZero, Uint};
 
 pub mod group;
 pub mod ecc;
+
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn hee() {
+    println!("hello");
+}
 
 fn mul_mod<const LIMBS: usize, const WIDE_LIMBS: usize>(a: &Uint<LIMBS>, b: &Uint<LIMBS>, p: &Uint<LIMBS>) -> Uint<LIMBS>
 where Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>> {
@@ -13,9 +21,9 @@ where Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>> {
 
 pub trait GroupManager: Into<GenericGroupManagerPrivateKey> {
     type SecretKey;
-    type PublicKey;
-    type GroupManagerPublicKey: GroupManagerPublicKey;
-    type Icc: Icc;
+    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
+    type GroupManagerPublicKey: GroupManagerPublicKey<PublicKey = Self::PublicKey>;
+    type Icc: Icc<SecretKey = Self::SecretKey, PublicKey = Self::PublicKey>;
     type Base;
 
     fn new(g: Option<Self::Base>) -> Self where Self: Sized;
@@ -29,10 +37,10 @@ pub trait GroupManager: Into<GenericGroupManagerPrivateKey> {
 }
 
 pub trait Icc: Into<GenericIccSecretKey> {
-    type GroupManagerPublicKey: GroupManagerPublicKey;
+    type GroupManagerPublicKey: GroupManagerPublicKey<PublicKey = Self::PublicKey>;
     type SecretKey;
     type SectorSpecificIdentifiers;
-    type PublicKey;
+    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
     type Signer<'a>: PssSigner where Self: 'a;
 
     fn new(gpk: Self::GroupManagerPublicKey, sk_icc_1_u: Self::SecretKey, sk_icc_2_u: Self::SecretKey) -> Self;
@@ -50,7 +58,7 @@ pub trait PssSigner {
 }
 
 pub trait GroupManagerPublicKey: Into<GenericGroupManagerPublicKey> {
-    type PublicKey;
+    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
     type Signature: PssSignature;
     type Base;
 
@@ -61,7 +69,7 @@ pub trait GroupManagerPublicKey: Into<GenericGroupManagerPublicKey> {
 }
 
 pub trait PssSignature: Into<GenericPssSignature> + TryFrom<GenericPssSignature> {
-    type PublicKey;
+    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
     type Scalar;
 
     fn c(&self) -> &Self::Scalar;
@@ -71,25 +79,32 @@ pub trait PssSignature: Into<GenericPssSignature> + TryFrom<GenericPssSignature>
     fn pseudonym2(&self) -> &Option<Self::PublicKey>;
 }
 
+#[derive(Debug)]
 pub struct GenericPssSignature {
-    c: Box<[u8]>,
-    s1: Box<[u8]>,
-    s2: Box<[u8]>,
-    pseudonym1: Option<Box<[u8]>>,
-    pseudonym2: Option<Box<[u8]>>
+    pub c: Box<[u8]>,
+    pub s1: Box<[u8]>,
+    pub s2: Box<[u8]>,
+    pub pseudonym1: Option<Box<[u8]>>,
+    pub pseudonym2: Option<Box<[u8]>>
 }
 
+#[derive(Debug)]
 pub struct GenericGroupManagerPrivateKey {
-    sk_m: Box<[u8]>,
-    sk_icc: Box<[u8]>,
+    pub sk_m: Box<[u8]>,
+    pub sk_icc: Box<[u8]>,
 }
 
+#[derive(Debug)]
 pub struct GenericGroupManagerPublicKey {
-    pk_m: Box<[u8]>,
-    pk_icc: Box<[u8]>
+    pub pk_m: Box<[u8]>,
+    pub pk_icc: Box<[u8]>
 }
 
+#[derive(Debug)]
 pub struct GenericIccSecretKey {
-    sk_icc_1_u: Box<[u8]>,
-    sk_icc_2_u: Box<[u8]>
+    pub sk_icc_1_u: Box<[u8]>,
+    pub sk_icc_2_u: Box<[u8]>
 }
+
+#[derive(Debug)]
+pub struct GenericPublicKey(pub Box<[u8]>);

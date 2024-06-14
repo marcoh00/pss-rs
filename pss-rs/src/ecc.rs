@@ -1,4 +1,4 @@
-use crate::{mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
+use crate::{mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GenericPublicKey, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
 
 use crypto_bigint::{generic_array::{sequence::GenericSequence, GenericArray}, rand_core::OsRng, ConcatMixed, Uint};
 use elliptic_curve::{point::PointCompression, sec1::{FromEncodedPoint, ModulusSize}, Curve, CurveArithmetic, PublicKey, SecretKey};
@@ -37,6 +37,22 @@ fn hash2curve<S: FromOkm>(hash: &[u8]) -> S {
         }
     });
     S::from_okm(&array_fitting_length)
+}
+
+impl<C: Curve + CurveArithmetic + PointCompression> From<PublicKey<C>> for GenericPublicKey
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
+    fn from(value: PublicKey<C>) -> Self {
+        GenericPublicKey(value.to_sec1_bytes())
+    }
+}
+
+impl<C: Curve + CurveArithmetic> TryFrom<GenericPublicKey> for PublicKey<C>
+where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
+    type Error = elliptic_curve::Error;
+
+    fn try_from(value: GenericPublicKey) -> Result<Self, Self::Error> {
+        PublicKey::from_sec1_bytes(&value.0)
+    }
 }
 
 pub struct SectorSpecificIdentifiers<C: Curve + CurveArithmetic> {
@@ -91,7 +107,7 @@ where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize
     }
 }
 
-impl<C: Curve + CurveArithmetic> PssSignature for EccPssSignature<C>
+impl<C: Curve + CurveArithmetic + PointCompression> PssSignature for EccPssSignature<C>
 where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
     type PublicKey = PublicKey<C>;
     type Scalar = C::Scalar;
@@ -128,7 +144,7 @@ where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize
     i_sector_icc_2: Option<PublicKey<C>>,
 }
 
-impl<'a, C: Curve + CurveArithmetic> PssSigner for EccPssSigner<'a, C>
+impl<'a, C: Curve + CurveArithmetic + PointCompression> PssSigner for EccPssSigner<'a, C>
 where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize, C::Scalar: FromOkm {
     type PssSignature = EccPssSignature<C>;
     

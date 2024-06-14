@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+    </head>
+    <body>
+        <p></p>
+    </body>
+    <script type="module">
+        import { default as init, Algorithm, sig_new_ident } from "./pkg/pss_rs_wasm.js";
+
+        async function main() {
+            const pssrs = await init();
+            const signer = sig_new_ident(Algorithm.Secp256k1, new Uint8Array([1,2,3]));
+            console.log(pssrs, signer);
+        }
+        main()
+
+    </script>
+</html>

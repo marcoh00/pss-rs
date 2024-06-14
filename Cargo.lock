@@ -269,6 +269,7 @@ dependencies = [
  "getrandom",
  "k256",
  "sha3",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -276,6 +277,8 @@ name = "pss-rs-wasm"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
+ "js-sys",
+ "k256",
  "pss-rs",
  "wasm-bindgen",
  "wasm-bindgen-test",
