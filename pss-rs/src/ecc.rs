@@ -6,21 +6,21 @@ use k256::elliptic_curve::{hash2curve::FromOkm, sec1::ToEncodedPoint, PrimeField
 use sha3::{digest::OutputSizeUser, Digest};
 use std::{marker::PhantomData, ops::{Add, Mul, Sub}};
 
-const ID_DSI: &[u8] = b"TODO replace with algorithm id";
+const ID_DSI: &[u8] = b"ECC-KECCAK256";
 
 fn signature_hash<C: Curve + CurveArithmetic>(q: &C::AffinePoint, a1_i_sector_icc_1: Option<(C::AffinePoint, &PublicKey<C>)>, a2_i_sector_icc_2: Option<(C::AffinePoint, &PublicKey<C>)>, pk_sector: &PublicKey<C>, message: &[u8]) -> GenericArray<u8, <sha3::Keccak256 as OutputSizeUser>::OutputSize>
 where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
     let mut c_message_buffer = Vec::new();
-    c_message_buffer.extend_from_slice(q.to_encoded_point(true).as_bytes());
+    c_message_buffer.extend_from_slice(q.to_encoded_point(false).as_bytes());
     if let Some((a1, i_sector_icc_1)) = a1_i_sector_icc_1 {
-        c_message_buffer.extend_from_slice(i_sector_icc_1.to_encoded_point(true).as_bytes());
-        c_message_buffer.extend_from_slice(a1.to_encoded_point(true).as_bytes());
+        c_message_buffer.extend_from_slice(i_sector_icc_1.to_encoded_point(false).as_bytes());
+        c_message_buffer.extend_from_slice(a1.to_encoded_point(false).as_bytes());
     }
     if let Some((a2, i_sector_icc_2)) = a2_i_sector_icc_2 {
-        c_message_buffer.extend_from_slice(i_sector_icc_2.to_encoded_point(true).as_bytes());
-        c_message_buffer.extend_from_slice(a2.to_encoded_point(true).as_bytes());
+        c_message_buffer.extend_from_slice(i_sector_icc_2.to_encoded_point(false).as_bytes());
+        c_message_buffer.extend_from_slice(a2.to_encoded_point(false).as_bytes());
     }
-    c_message_buffer.extend_from_slice(pk_sector.to_encoded_point(true).as_bytes());
+    c_message_buffer.extend_from_slice(pk_sector.to_encoded_point(false).as_bytes());
     c_message_buffer.extend_from_slice(ID_DSI);
     c_message_buffer.extend_from_slice(message);
 
@@ -42,7 +42,7 @@ fn hash2curve<S: FromOkm>(hash: &[u8]) -> S {
 impl<C: Curve + CurveArithmetic + PointCompression> From<PublicKey<C>> for GenericPublicKey
 where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
     fn from(value: PublicKey<C>) -> Self {
-        GenericPublicKey(value.to_sec1_bytes())
+        GenericPublicKey(value.as_affine().to_encoded_point(false).as_bytes().into())
     }
 }
 
@@ -82,8 +82,8 @@ where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize
             c: self.c.to_repr().as_slice().into(),
             s1: self.s1.to_repr().as_slice().into(),
             s2: self.s2.to_repr().as_slice().into(),
-            pseudonym1: self.pseudonyms.0.map(|pk| pk.to_encoded_point(true).to_bytes()),
-            pseudonym2: self.pseudonyms.1.map(|pk| pk.to_encoded_point(true).to_bytes())
+            pseudonym1: self.pseudonyms.0.map(|pk| pk.to_encoded_point(false).to_bytes()),
+            pseudonym2: self.pseudonyms.1.map(|pk| pk.to_encoded_point(false).to_bytes())
             
         }
     }
