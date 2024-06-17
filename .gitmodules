@@ -1,3 +1,6 @@
 [submodule "pss-sol/lib/forge-std"]
 	path = pss-sol/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "pss-sol/lib/elliptic-curve-solidity"]
+	path = pss-sol/lib/elliptic-curve-solidity
+	url = https://github.com/witnet/elliptic-curve-solidity
