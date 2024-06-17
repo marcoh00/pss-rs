@@ -39,22 +39,62 @@ contract PssSecp256k1 {
 
     function validate_signature(bytes calldata message, uint256 gpkIdx, uint256 c, uint256 s1, uint256 s2) public view returns (bool) {
         (uint256 q1_x, uint256 q1_y) = calc_q1(gpkIdx, c, s1, s2);
-        return true;
+        bytes32 c_recover = keccak256(abi.encodePacked(
+                uint8(4),
+                q1_x,
+                q1_y,
+                uint8(4),
+                pk_sector_x,
+                pk_sector_y,
+                DSI,
+                message
+        ));
+        return c_recover == bytes32(c);
     }
 
     function validate_signature_p1(bytes calldata message, uint256 gpkIdx, uint256 c, uint256 s1, uint256 s2, uint8 pseudonym1_parity, uint256 pseudonym1_x) public view returns (bool) {
         (uint256 q1_x, uint256 q1_y) = calc_q1(gpkIdx, c, s1, s2);
-        return true;
+        bytes32 c_recover = keccak256(abi.encodePacked(
+                uint8(4),
+                q1_x,
+                q1_y,
+                uint8(4),
+                pk_sector_x,
+                pk_sector_y,
+                DSI,
+                message
+        ));
+        return c_recover == bytes32(c);
     }
 
     function validate_signature_p1_p2(bytes calldata message, uint256 gpkIdx, uint256 c, uint256 s1, uint256 s2, uint8 pseudonym1_parity, uint256 pseudonym1_x, uint8 pseudonym2_parity, uint256 pseudonym2_x) public view returns (bool) {
         (uint256 q1_x, uint256 q1_y) = calc_q1(gpkIdx, c, s1, s2);
-        return true;
+        bytes32 c_recover = keccak256(abi.encodePacked(
+                uint8(4),
+                q1_x,
+                q1_y,
+                uint8(4),
+                pk_sector_x,
+                pk_sector_y,
+                DSI,
+                message
+        ));
+        return c_recover == bytes32(c);
     }
 
     function validate_signature_p2(bytes calldata message, uint256 gpkIdx, uint256 c, uint256 s1, uint256 s2, uint8 pseudonym2_parity, uint256 pseudonym2_x) public view returns (bool) {
         (uint256 q1_x, uint256 q1_y) = calc_q1(gpkIdx, c, s1, s2);
-        return true;
+        bytes32 c_recover = keccak256(abi.encodePacked(
+                uint8(4),
+                q1_x,
+                q1_y,
+                uint8(4),
+                pk_sector_x,
+                pk_sector_y,
+                DSI,
+                message
+        ));
+        return c_recover == bytes32(c);
     }
 
     function setNumber(uint256 newNumber) public {

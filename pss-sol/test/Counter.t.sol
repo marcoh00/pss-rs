@@ -12,7 +12,7 @@ contract PssSecp256k1Test is Test {
     }
 
     function test_Increment() public {
-        assertEq(1, 1);
+        assertEq(uint8(1), 1);
     }
 
     function testFuzz_SetNumber(uint256 x) public {
