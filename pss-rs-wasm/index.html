@@ -9,6 +9,20 @@
     <script type="module">
         import { default as init, Algorithm, JsGroupManagerPrivateKey } from "./pkg/pss_rs_wasm.js";
 
+        function bytes2hex(ary) {
+            return ary.reduce(function red(work, i) {
+                return work + i.toString(16).padStart(2, "0");
+            }, "");
+        }
+
+        function log_pubkey(prefix, pubkey) {
+            const pk = bytes2hex(pubkey);
+            const pk_x = pk.slice(2,66);
+            const pk_y = pk.slice(66);
+            console.log(`${prefix}`, pk);
+            console.log(`${prefix}.x`, pk_x, pk_x.length, `${prefix}.y`, pk_y, pk_y.length);
+        }
+
         async function main() {
             const pssrs = await init();
             const alg = Algorithm.Secp256k1;
@@ -19,6 +33,23 @@
             const sig = icc.sign(alg, gpk, sector, true, true, [0, 1, 2]);
             console.log("gm, gpk, sector, icc, sig", gm, gpk, sector, icc, sig);
             console.log("Sig ok?", gpk.check_signature(alg, sector, sig, [0, 1, 2]));
+
+            log_pubkey("pk_m", gpk.pk_m);
+            log_pubkey("pk_icc", gpk.pk_icc);
+            log_pubkey("pk_sector", sector[0])
+
+            const c = bytes2hex(sig.c);
+            const s1 = bytes2hex(sig.s1);
+            const s2 = bytes2hex(sig.s2);
+            console.log("c", c, c.length, "s1", s1, s1.length, "s2", s2, s2.length);
+
+            if (sig.pseudonym1) {
+                log_pubkey("i_sector_icc_1", sig.pseudonym1);
+            }
+
+            if (sig.pseudonym2) {
+                log_pubkey("i_sector_icc_2", sig.pseudonym2);
+            }
         }
         main()
 

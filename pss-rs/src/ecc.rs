@@ -45,7 +45,7 @@ fn hash2curve<C: CurveArithmetic>(hash: &[u8]) -> C::Scalar {
 impl<C: Curve + CurveArithmetic + PointCompression> From<PublicKey<C>> for GenericPublicKey
 where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
     fn from(value: PublicKey<C>) -> Self {
-        GenericPublicKey(value.as_affine().to_encoded_point(false).as_bytes().into())
+        GenericPublicKey(value.to_encoded_point(false).as_bytes().into())
     }
 }
 
@@ -85,8 +85,8 @@ where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize
             c: self.c.to_repr().as_slice().into(),
             s1: self.s1.to_repr().as_slice().into(),
             s2: self.s2.to_repr().as_slice().into(),
-            pseudonym1: self.pseudonyms.0.map(|pk| pk.to_encoded_point(false).to_bytes()),
-            pseudonym2: self.pseudonyms.1.map(|pk| pk.to_encoded_point(false).to_bytes())
+            pseudonym1: self.pseudonyms.0.map(|pk| pk.to_encoded_point(true).to_bytes()),
+            pseudonym2: self.pseudonyms.1.map(|pk| pk.to_encoded_point(true).to_bytes())
             
         }
     }
