@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
-use crypto_bigint::{const_residue, generic_array::GenericArray, impl_modulus, modular::constant_mod::{Residue, ResidueParams}, rand_core::OsRng, ArrayDecoding, CheckedSub, ConcatMixed, Encoding, NonZero, RandomMod, SplitMixed, Uint, U2048, U64};
+pub use crypto_bigint::{Uint, modular::constant_mod::ResidueParams, ConcatMixed};
+
+use crypto_bigint::{const_residue, generic_array::GenericArray, impl_modulus, modular::constant_mod::Residue, rand_core::OsRng, ArrayDecoding, CheckedSub, Encoding, NonZero, RandomMod, SplitMixed, U2048, U64};
 use sha3::{digest::OutputSizeUser, Digest};
 
 use crate::{mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GenericPublicKey, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};

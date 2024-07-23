@@ -3,8 +3,9 @@ use wasm_bindgen::prelude::*;
 
 use crypto_bigint::{ConcatMixed, NonZero, Uint};
 
-pub mod group;
 pub mod ecc;
+#[cfg(feature = "dh")]
+pub mod group;
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub fn hee() {
