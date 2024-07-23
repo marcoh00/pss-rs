@@ -23,24 +23,11 @@
             console.log(`${prefix}.x`, pk_x, pk_x.length, `${prefix}.y`, pk_y, pk_y.length);
         }
 
-        async function main() {
-            const pssrs = await init();
-            const alg = Algorithm.Secp256k1;
-            const gm = new JsGroupManagerPrivateKey(alg);
-            const gpk = gm.public_key(alg);
-            const sector = gm.new_sector(alg, false);
-            const icc = gm.new_icc(alg);
-            const sig = icc.sign(alg, gpk, sector, true, true, [0, 1, 2]);
-            console.log("gm, gpk, sector, icc, sig", gm, gpk, sector, icc, sig);
-            console.log("Sig ok?", gpk.check_signature(alg, sector, sig, [0, 1, 2]));
-
-            log_pubkey("pk_m", gpk.pk_m);
-            log_pubkey("pk_icc", gpk.pk_icc);
-            log_pubkey("pk_sector", sector[0])
-
+        function log_sig(prefix, sig) {
             const c = bytes2hex(sig.c);
             const s1 = bytes2hex(sig.s1);
             const s2 = bytes2hex(sig.s2);
+            console.log(`---------------------- ${prefix} ----------------------`);
             console.log("c", c, c.length, "s1", s1, s1.length, "s2", s2, s2.length);
 
             if (sig.pseudonym1) {
@@ -51,6 +38,31 @@
                 log_pubkey("i_sector_icc_2", sig.pseudonym2);
             }
         }
+
+        async function main() {
+            const pssrs = await init();
+            const alg = Algorithm.Secp256k1;
+            const gm = new JsGroupManagerPrivateKey(alg);
+            const gpk = gm.public_key(alg);
+            const sector = gm.new_sector(alg, false);
+            const icc = gm.new_icc(alg);
+            const sig00 = icc.sign(alg, gpk, sector, false, false, [0, 1, 2]);
+            const sig01 = icc.sign(alg, gpk, sector, false, true, [0, 1, 2]);
+            const sig10 = icc.sign(alg, gpk, sector, true, false, [0, 1, 2]);
+            const sig11 = icc.sign(alg, gpk, sector, true, true, [0, 1, 2]);
+            console.log("gm, gpk, sector, icc, sig", gm, gpk, sector, icc, sig11);
+            console.log("Sig ok?", gpk.check_signature(alg, sector, sig11, [0, 1, 2]));
+
+            log_pubkey("pk_m", gpk.pk_m);
+            log_pubkey("pk_icc", gpk.pk_icc);
+            log_pubkey("pk_sector", sector[0])
+
+            log_sig("s00", sig00);
+            log_sig("s01", sig01);
+            log_sig("s10", sig10);
+            log_sig("s11", sig11);
+        }
+
         main()
 
     </script>
