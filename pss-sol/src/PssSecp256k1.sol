@@ -50,7 +50,7 @@ contract PssSecp256k1 {
     }
 
     function validate_signature(bytes calldata message, uint256 c, uint256 s1, uint256 s2) public view returns (bool) {
-        return keccak256(recover_hash_input(message, c, s1, s2)) == bytes32(c);
+        return uint256(keccak256(recover_hash_input(message, c, s1, s2))) % PP == c;
     }
 
     function recover_hash_input(bytes calldata message, uint256 c, uint256 s1, uint256 s2) public view returns (bytes memory) {
@@ -69,7 +69,7 @@ contract PssSecp256k1 {
     }
 
     function validate_signature_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x) public view returns (bool) {
-        return keccak256(recover_hash_input_p1(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x)) == bytes32(c);
+        return uint256(keccak256(recover_hash_input_p1(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x))) % PP == c;
     }
 
     function recover_hash_input_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x) public view returns (bytes memory) {
@@ -96,7 +96,7 @@ contract PssSecp256k1 {
     }
 
     function validate_signature_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bool) {
-        return keccak256(recover_hash_input_p1_p2(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x, i_sector_icc_2_parity, i_sector_icc_2_x)) == bytes32(c);
+        return uint256(keccak256(recover_hash_input_p1_p2(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x, i_sector_icc_2_parity, i_sector_icc_2_x))) % PP == c;
     }
 
     function recover_hash_input_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bytes memory) {
@@ -131,7 +131,7 @@ contract PssSecp256k1 {
     }
 
     function validate_signature_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bool) {
-        return keccak256(recover_hash_input_p2(message, c, s1, s2, i_sector_icc_2_parity, i_sector_icc_2_x)) == bytes32(c);
+        return uint256(keccak256(recover_hash_input_p2(message, c, s1, s2, i_sector_icc_2_parity, i_sector_icc_2_x))) % PP == c;
     }
 
     function recover_hash_input_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bytes memory) {
