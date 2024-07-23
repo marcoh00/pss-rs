@@ -6,6 +6,7 @@ use crypto_bigint::{ConcatMixed, NonZero, Uint};
 pub mod ecc;
 #[cfg(feature = "dh")]
 pub mod group;
+pub mod rustcryptoecc;
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub fn hee() {

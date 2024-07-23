@@ -3,10 +3,37 @@ use crate::{mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey
 use crypto_bigint::{generic_array::{sequence::GenericSequence, GenericArray}, rand_core::OsRng, ArrayEncoding, ConcatMixed, NonZero, Uint};
 use elliptic_curve::{point::PointCompression, sec1::{FromEncodedPoint, ModulusSize}, Curve, CurveArithmetic, PublicKey, SecretKey};
 use k256::elliptic_curve::{sec1::ToEncodedPoint, PrimeField, ScalarPrimitive};
+use rand_core::CryptoRngCore;
 use sha3::Digest;
 use std::{marker::PhantomData, ops::{Add, Mul, Rem, Sub}};
 
 const ID_DSI: &[u8] = b"ECC-KECCAK256";
+
+pub trait Serialization {
+    fn serialize(&self) -> Vec<u8>;
+    fn deserialize(buf: &[u8]) -> Self;
+}
+
+pub trait Scalar<C> {
+    fn random(rng: &mut impl CryptoRngCore) -> Self;
+    fn add(&self, other: &Self) -> Self;
+    fn sub(&self, other: &Self) -> Self;
+    fn mul(&self, other: &Self) -> Self;
+    fn from_hash(hash: &[u8]) -> Self;
+}
+
+pub trait Point<C, S: Scalar<C>> {
+    fn base() -> Self;
+    fn random(rng: &mut impl CryptoRngCore) -> Self;
+    fn add(&self, other: &Self) -> Self;
+    fn mul(&self, other: &S) -> Self;
+}
+
+pub trait UsableEccCurve {
+    type Curve;
+    type Scalar: Scalar<Self::Curve> + Serialization;
+    type Point: Point<Self::Curve, Self::Scalar> + Serialization;
+}
 
 fn signature_hash<C: Curve + CurveArithmetic, D: Digest>(q: &C::AffinePoint, a1_i_sector_icc_1: Option<(C::AffinePoint, &PublicKey<C>)>, a2_i_sector_icc_2: Option<(C::AffinePoint, &PublicKey<C>)>, pk_sector: &PublicKey<C>, message: &[u8]) -> GenericArray<u8, D::OutputSize>
 where C::AffinePoint: FromEncodedPoint<C> + ToEncodedPoint<C>, C::FieldBytesSize: ModulusSize {
