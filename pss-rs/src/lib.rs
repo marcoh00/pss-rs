@@ -23,7 +23,7 @@ where Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>> {
 
 pub trait GroupManager: Into<GenericGroupManagerPrivateKey> {
     type SecretKey;
-    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
+    type PublicKey: TryFrom<Box<[u8]>> + Into<Box<[u8]>>;
     type GroupManagerPublicKey: GroupManagerPublicKey<PublicKey = Self::PublicKey>;
     type Icc: Icc<SecretKey = Self::SecretKey, PublicKey = Self::PublicKey>;
     type Base;
@@ -42,7 +42,7 @@ pub trait Icc: Into<GenericIccSecretKey> {
     type GroupManagerPublicKey: GroupManagerPublicKey<PublicKey = Self::PublicKey>;
     type SecretKey;
     type SectorSpecificIdentifiers;
-    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
+    type PublicKey: TryFrom<Box<[u8]>> + Into<Box<[u8]>>;
     type Signer<'a>: PssSigner where Self: 'a;
 
     fn new(gpk: Self::GroupManagerPublicKey, sk_icc_1_u: Self::SecretKey, sk_icc_2_u: Self::SecretKey) -> Self;
@@ -60,7 +60,7 @@ pub trait PssSigner {
 }
 
 pub trait GroupManagerPublicKey: Into<GenericGroupManagerPublicKey> {
-    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
+    type PublicKey: TryFrom<Box<[u8]>> + Into<Box<[u8]>>;
     type Signature: PssSignature;
     type Base;
 
@@ -71,7 +71,7 @@ pub trait GroupManagerPublicKey: Into<GenericGroupManagerPublicKey> {
 }
 
 pub trait PssSignature: Into<GenericPssSignature> + TryFrom<GenericPssSignature> {
-    type PublicKey: TryFrom<GenericPublicKey> + Into<GenericPublicKey>;
+    type PublicKey: TryFrom<Box<[u8]>> + Into<Box<[u8]>>;
     type Scalar;
 
     fn c(&self) -> &Self::Scalar;
@@ -110,3 +110,21 @@ pub struct GenericIccSecretKey {
 
 #[derive(Debug)]
 pub struct GenericPublicKey(pub Box<[u8]>);
+
+impl From<Box<[u8]>> for GenericPublicKey {
+    fn from(value: Box<[u8]>) -> Self {
+        Self(value)
+    }
+}
+
+impl Into<Box<[u8]>> for GenericPublicKey {
+    fn into(self) -> Box<[u8]> {
+        self.0
+    }
+}
+
+impl AsRef<[u8]> for GenericPublicKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
