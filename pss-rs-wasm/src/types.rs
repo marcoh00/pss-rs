@@ -1,11 +1,4 @@
 use js_sys::{wasm_bindgen, Uint8Array};
-use k256::{
-    elliptic_curve::{
-        bigint::{ConcatMixed, Integer},
-        Curve,
-    },
-    Secp256k1,
-};
 use pss_rs::{
     ecc::{EccGroupManager, EccGroupManagerPublicKey, EccIcc, EccPssSignature},
     rustcryptoecc::PssSecp256k1,
@@ -31,8 +24,6 @@ mod dh {
         GroupGroupManager<DH2048_LIMBS, DH2048_WIDE_LIMBS, DhModp2048Modulus>;
 }
 
-const SECP256K1_LIMBS: usize = <<Secp256k1 as Curve>::Uint as Integer>::LIMBS;
-const SECP256K1_WIDE_LIMBS: usize = <<Secp256k1 as Curve>::Uint as ConcatMixed>::MixedOutput::LIMBS;
 type Secp256k1GroupManager = EccGroupManager<PssSecp256k1>;
 
 #[wasm_bindgen(getter_with_clone)]

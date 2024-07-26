@@ -8,10 +8,7 @@ use crypto_bigint::{generic_array::GenericArray, rand_core::OsRng};
 
 use rand_core::CryptoRngCore;
 use sha3::Digest;
-use std::{
-    marker::PhantomData,
-    ops::{Add, Mul, Sub},
-};
+use std::marker::PhantomData;
 
 const ID_DSI: &[u8] = b"ECC-KECCAK256";
 pub trait Scalar<C> {
@@ -488,19 +485,13 @@ impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Sub;
-
-    
-    
-    use rand_core::{OsRng};
-
+    use rand_core::OsRng;
     use crate::{
         ecc::{EccIcc, EccPssSignature, PssCompatibleEccCurve, Scalar},
         rustcryptoecc::PssSecp256k1,
         GenericGroupManagerPublicKey, GenericPssSignature, GroupManager,
         GroupManagerPublicKey, Icc, PssSigner,
     };
-
     use super::{EccGroupManager, EccGroupManagerPublicKey};
 
     const SIGN_MESSAGE: &[u8] = b"TEST MESSAGE";
