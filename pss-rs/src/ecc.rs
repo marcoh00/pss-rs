@@ -1,11 +1,21 @@
-use crate::{GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
+use crate::{
+    GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey,
+    GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner,
+};
 
-use crypto_bigint::{generic_array::{GenericArray}, rand_core::OsRng};
-use elliptic_curve::{point::PointCompression, sec1::{FromEncodedPoint, ModulusSize}, Curve, CurveArithmetic, PublicKey, SecretKey};
+use crypto_bigint::{generic_array::GenericArray, rand_core::OsRng};
+use elliptic_curve::{
+    point::PointCompression,
+    sec1::{FromEncodedPoint, ModulusSize},
+    Curve, CurveArithmetic, PublicKey, SecretKey,
+};
 use k256::elliptic_curve::{sec1::ToEncodedPoint, PrimeField, ScalarPrimitive};
 use rand_core::CryptoRngCore;
 use sha3::Digest;
-use std::{marker::PhantomData, ops::{Add, Mul, Rem, Sub}};
+use std::{
+    marker::PhantomData,
+    ops::{Add, Mul, Rem, Sub},
+};
 
 const ID_DSI: &[u8] = b"ECC-KECCAK256";
 pub trait Scalar<C> {
@@ -19,7 +29,7 @@ pub trait Scalar<C> {
     fn from_hash(hash: &[u8]) -> Self;
 }
 
-pub trait Point<C>  {
+pub trait Point<C> {
     type Scalar: Scalar<C>;
 
     fn base() -> Self;
@@ -30,11 +40,25 @@ pub trait Point<C>  {
 
 pub trait PssCompatibleEccCurve: Clone {
     type Curve;
-    type Scalar: Scalar<Self::Curve, Point = Self::Point> + Clone + TryFrom<Box<[u8]>> + Into<Box<[u8]>> + PartialEq;
-    type Point: Point<Self::Curve, Scalar = Self::Scalar> + Clone + TryFrom<Box<[u8]>> + Into<Box<[u8]>> + PartialEq;
+    type Scalar: Scalar<Self::Curve, Point = Self::Point>
+        + Clone
+        + TryFrom<Box<[u8]>>
+        + Into<Box<[u8]>>
+        + PartialEq;
+    type Point: Point<Self::Curve, Scalar = Self::Scalar>
+        + Clone
+        + TryFrom<Box<[u8]>>
+        + Into<Box<[u8]>>
+        + PartialEq;
 }
 
-fn signature_hash<C: PssCompatibleEccCurve, D: Digest>(q: &C::Point, a1_i_sector_icc_1: Option<(C::Point, &C::Point)>, a2_i_sector_icc_2: Option<(C::Point, &C::Point)>, pk_sector: &C::Point, message: &[u8]) -> GenericArray<u8, D::OutputSize> {
+fn signature_hash<C: PssCompatibleEccCurve, D: Digest>(
+    q: &C::Point,
+    a1_i_sector_icc_1: Option<(C::Point, &C::Point)>,
+    a2_i_sector_icc_2: Option<(C::Point, &C::Point)>,
+    pk_sector: &C::Point,
+    message: &[u8],
+) -> GenericArray<u8, D::OutputSize> {
     let mut c_message_buffer = Vec::new();
     c_message_buffer.extend_from_slice(&Into::<Box<[u8]>>::into(q.clone()));
     if let Some((a1, i_sector_icc_1)) = a1_i_sector_icc_1 {
@@ -54,12 +78,15 @@ fn signature_hash<C: PssCompatibleEccCurve, D: Digest>(q: &C::Point, a1_i_sector
 
 pub struct SectorSpecificIdentifiers<C: PssCompatibleEccCurve> {
     i_sector_icc_1: C::Point,
-    i_sector_icc_2: C::Point
+    i_sector_icc_2: C::Point,
 }
 
 impl<C: PssCompatibleEccCurve> SectorSpecificIdentifiers<C> {
     pub fn new(i_sector_icc_1: C::Point, i_sector_icc_2: C::Point) -> Self {
-        Self { i_sector_icc_1, i_sector_icc_2 }
+        Self {
+            i_sector_icc_1,
+            i_sector_icc_2,
+        }
     }
 }
 
@@ -68,7 +95,7 @@ pub struct EccPssSignature<C: PssCompatibleEccCurve> {
     c: C::Scalar,
     s1: C::Scalar,
     s2: C::Scalar,
-    pseudonyms: (Option<C::Point>, Option<C::Point>)
+    pseudonyms: (Option<C::Point>, Option<C::Point>),
 }
 
 impl<C: PssCompatibleEccCurve> Into<GenericPssSignature> for EccPssSignature<C> {
@@ -78,8 +105,7 @@ impl<C: PssCompatibleEccCurve> Into<GenericPssSignature> for EccPssSignature<C> 
             s1: self.s1.into(),
             s2: self.s2.into(),
             pseudonym1: self.pseudonyms.0.map(|pk| pk.into()),
-            pseudonym2: self.pseudonyms.1.map(|pk| pk.into())
-            
+            pseudonym2: self.pseudonyms.1.map(|pk| pk.into()),
         }
     }
 }
@@ -92,11 +118,18 @@ impl<C: PssCompatibleEccCurve> TryFrom<GenericPssSignature> for EccPssSignature<
         let s2 = C::Scalar::try_from(value.s2).map_err(|_| ())?;
 
         let pseudonyms = (
-            value.pseudonym1.map(|spoint| C::Point::try_from(spoint).map_err(|_| ()).unwrap()),
-            value.pseudonym2.map(|spoint| C::Point::try_from(spoint).map_err(|_| ()).unwrap())
+            value
+                .pseudonym1
+                .map(|spoint| C::Point::try_from(spoint).map_err(|_| ()).unwrap()),
+            value
+                .pseudonym2
+                .map(|spoint| C::Point::try_from(spoint).map_err(|_| ()).unwrap()),
         );
         Ok(EccPssSignature {
-            c, s1, s2, pseudonyms
+            c,
+            s1,
+            s2,
+            pseudonyms,
         })
     }
 }
@@ -132,12 +165,12 @@ pub struct EccPssSigner<'a, C: PssCompatibleEccCurve> {
     pk_sector: &'a C::Point,
     pk_m: &'a C::Point,
     i_sector_icc_1: Option<C::Point>,
-    i_sector_icc_2: Option<C::Point>
+    i_sector_icc_2: Option<C::Point>,
 }
 
 impl<'a, C: PssCompatibleEccCurve> PssSigner for EccPssSigner<'a, C> {
     type PssSignature = EccPssSignature<C>;
-    
+
     fn sign(&self, message: &[u8]) -> Self::PssSignature {
         let k1 = C::Scalar::random(&mut OsRng::default());
         let k2 = C::Scalar::random(&mut OsRng::default());
@@ -147,14 +180,20 @@ impl<'a, C: PssCompatibleEccCurve> PssSigner for EccPssSigner<'a, C> {
 
         let pseudonym1 = match self.i_sector_icc_1 {
             Some(ref pubkey) => Some((self.pk_sector.mul(&k1), pubkey)),
-            None => None
+            None => None,
         };
         let pseudonym2 = match self.i_sector_icc_2 {
             Some(ref pubkey) => Some((self.pk_sector.mul(&k2), pubkey)),
-            None => None
+            None => None,
         };
 
-        let c_bin = signature_hash::<C, sha3::Keccak256>(&q1, pseudonym1, pseudonym2, &self.pk_sector, message);
+        let c_bin = signature_hash::<C, sha3::Keccak256>(
+            &q1,
+            pseudonym1,
+            pseudonym2,
+            &self.pk_sector,
+            message,
+        );
         let c = C::Scalar::from_hash(&c_bin);
 
         let s1 = k1.sub(&c.mul(self.sk_icc_1_u));
@@ -164,10 +203,7 @@ impl<'a, C: PssCompatibleEccCurve> PssSigner for EccPssSigner<'a, C> {
             c,
             s1,
             s2,
-            pseudonyms: (
-                self.i_sector_icc_1.clone(),
-                self.i_sector_icc_2.clone()
-            )
+            pseudonyms: (self.i_sector_icc_1.clone(), self.i_sector_icc_2.clone()),
         }
     }
 }
@@ -175,7 +211,7 @@ impl<'a, C: PssCompatibleEccCurve> PssSigner for EccPssSigner<'a, C> {
 pub struct EccIcc<C: PssCompatibleEccCurve> {
     gpk: EccGroupManagerPublicKey<C>,
     sk_icc_1_u: C::Scalar,
-    sk_icc_2_u: C::Scalar
+    sk_icc_2_u: C::Scalar,
 }
 
 impl<C: PssCompatibleEccCurve> Icc for EccIcc<C> {
@@ -187,8 +223,16 @@ impl<C: PssCompatibleEccCurve> Icc for EccIcc<C> {
         where C: 'a, <C as PssCompatibleEccCurve>::Scalar: 'a,
         <C as PssCompatibleEccCurve>::Point: 'a;
 
-    fn new(gpk: Self::GroupManagerPublicKey, sk_icc_1_u: Self::SecretKey, sk_icc_2_u: Self::SecretKey) -> Self {
-        let nym = Self { gpk, sk_icc_1_u, sk_icc_2_u };
+    fn new(
+        gpk: Self::GroupManagerPublicKey,
+        sk_icc_1_u: Self::SecretKey,
+        sk_icc_2_u: Self::SecretKey,
+    ) -> Self {
+        let nym = Self {
+            gpk,
+            sk_icc_1_u,
+            sk_icc_2_u,
+        };
         assert!(nym.valid_for_gpk(&nym.gpk));
         nym
     }
@@ -206,13 +250,21 @@ impl<C: PssCompatibleEccCurve> Icc for EccIcc<C> {
         SectorSpecificIdentifiers::new(i_sector_icc_1, i_sector_icc_2)
     }
 
-    fn signer<'a>(&'a self, pk_sector: &'a Self::PublicKey, use_identifier1: bool, use_identifier2: bool) -> <Self as Icc>::Signer<'a> {
+    fn signer<'a>(
+        &'a self,
+        pk_sector: &'a Self::PublicKey,
+        use_identifier1: bool,
+        use_identifier2: bool,
+    ) -> <Self as Icc>::Signer<'a> {
         let identifiers = self.sector_identifiers(pk_sector);
         let (i_sector_icc_1, i_sector_icc_2) = match (use_identifier1, use_identifier2) {
-            (true, true) => (Some(identifiers.i_sector_icc_1), Some(identifiers.i_sector_icc_2)),
+            (true, true) => (
+                Some(identifiers.i_sector_icc_1),
+                Some(identifiers.i_sector_icc_2),
+            ),
             (true, false) => (Some(identifiers.i_sector_icc_1), None),
             (false, true) => (None, Some(identifiers.i_sector_icc_2)),
-            (false, false) => (None, None)
+            (false, false) => (None, None),
         };
         EccPssSigner {
             sk_icc_1_u: &self.sk_icc_1_u,
@@ -220,23 +272,34 @@ impl<C: PssCompatibleEccCurve> Icc for EccIcc<C> {
             pk_sector: pk_sector,
             pk_m: &self.gpk.pk_m,
             i_sector_icc_1,
-            i_sector_icc_2
+            i_sector_icc_2,
         }
     }
-    
-    fn from_generic_secret_key(secret_key: crate::GenericIccSecretKey, gpk: Self::GroupManagerPublicKey) -> Self {
-        let sk_icc_1_u = C::Scalar::try_from(secret_key.sk_icc_1_u).map_err(|_| ()).unwrap();
-        let sk_icc_2_u = C::Scalar::try_from(secret_key.sk_icc_2_u).map_err(|_| ()).unwrap();
+
+    fn from_generic_secret_key(
+        secret_key: crate::GenericIccSecretKey,
+        gpk: Self::GroupManagerPublicKey,
+    ) -> Self {
+        let sk_icc_1_u = C::Scalar::try_from(secret_key.sk_icc_1_u)
+            .map_err(|_| ())
+            .unwrap();
+        let sk_icc_2_u = C::Scalar::try_from(secret_key.sk_icc_2_u)
+            .map_err(|_| ())
+            .unwrap();
         Self {
-            gpk, sk_icc_1_u, sk_icc_2_u
+            gpk,
+            sk_icc_1_u,
+            sk_icc_2_u,
         }
     }
 }
 
-
 impl<C: PssCompatibleEccCurve> From<EccIcc<C>> for GenericIccSecretKey {
     fn from(value: EccIcc<C>) -> Self {
-        Self { sk_icc_1_u: value.sk_icc_1_u.into(), sk_icc_2_u: value.sk_icc_2_u.into() }
+        Self {
+            sk_icc_1_u: value.sk_icc_1_u.into(),
+            sk_icc_2_u: value.sk_icc_2_u.into(),
+        }
     }
 }
 
@@ -253,7 +316,7 @@ pub struct EccGroupManager<C: PssCompatibleEccCurve> {
     sk_m: C::Scalar,
     sk_icc: C::Scalar,
     gpk: EccGroupManagerPublicKey<C>,
-    sectors: Vec<(C::Point, Option<SectorKey<C>>)>
+    sectors: Vec<(C::Point, Option<SectorKey<C>>)>,
 }
 
 impl<C: PssCompatibleEccCurve> GroupManager for EccGroupManager<C> {
@@ -262,19 +325,28 @@ impl<C: PssCompatibleEccCurve> GroupManager for EccGroupManager<C> {
     type GroupManagerPublicKey = EccGroupManagerPublicKey<C>;
     type Icc = EccIcc<C>;
     type Base = EccGroupManagerBaseIsImplicitInCurve;
-    
+
     fn new(_g: Option<Self::Base>) -> Self {
         let sk_m = C::Scalar::random(&mut OsRng::default());
         let sk_icc = C::Scalar::random(&mut OsRng::default());
         Self::new_from_secret_parts(sk_m, sk_icc, _g)
     }
 
-    fn new_from_secret_parts(sk_m: Self::SecretKey, sk_icc: Self::SecretKey, _g: Option<Self::Base>) -> Self {
+    fn new_from_secret_parts(
+        sk_m: Self::SecretKey,
+        sk_icc: Self::SecretKey,
+        _g: Option<Self::Base>,
+    ) -> Self {
         let pk_m = sk_m.to_point();
         let pk_icc = sk_icc.to_point();
         let gpk = EccGroupManagerPublicKey::new(pk_m, pk_icc, None);
         let sectors = Vec::new();
-        Self { sk_m, sk_icc, gpk, sectors }
+        Self {
+            sk_m,
+            sk_icc,
+            gpk,
+            sectors,
+        }
     }
 
     fn renew_icc(&mut self) -> Self::SecretKey {
@@ -297,19 +369,33 @@ impl<C: PssCompatibleEccCurve> GroupManager for EccGroupManager<C> {
     fn new_sector(&mut self, deanonymizable: bool) -> Self::PublicKey {
         let key = SectorKey(C::Scalar::random(&mut OsRng::default()));
         let pubkey: C::Point = key.public_key();
-        self.sectors.push((pubkey.clone(), match deanonymizable {
-            true => Some(key),
-            false => None
-        }));
+        self.sectors.push((
+            pubkey.clone(),
+            match deanonymizable {
+                true => Some(key),
+                false => None,
+            },
+        ));
         pubkey
     }
 
     fn public_key(&self) -> &Self::GroupManagerPublicKey {
         &self.gpk
     }
-    
-    fn from_generic_secret_key(secret_key: crate::GenericGroupManagerPrivateKey, _g: Option<Box<[u8]>>) -> Self {
-        Self::new_from_secret_parts(C::Scalar::try_from(secret_key.sk_m).map_err(|_| ()).unwrap(), C::Scalar::try_from(secret_key.sk_icc).map_err(|_| ()).unwrap(), None)
+
+    fn from_generic_secret_key(
+        secret_key: crate::GenericGroupManagerPrivateKey,
+        _g: Option<Box<[u8]>>,
+    ) -> Self {
+        Self::new_from_secret_parts(
+            C::Scalar::try_from(secret_key.sk_m)
+                .map_err(|_| ())
+                .unwrap(),
+            C::Scalar::try_from(secret_key.sk_icc)
+                .map_err(|_| ())
+                .unwrap(),
+            None,
+        )
     }
 }
 
@@ -317,7 +403,7 @@ impl<C: PssCompatibleEccCurve> From<EccGroupManager<C>> for GenericGroupManagerP
     fn from(value: EccGroupManager<C>) -> Self {
         Self {
             sk_m: value.sk_m.into(),
-            sk_icc: value.sk_icc.into()
+            sk_icc: value.sk_icc.into(),
         }
     }
 }
@@ -325,7 +411,7 @@ impl<C: PssCompatibleEccCurve> From<EccGroupManager<C>> for GenericGroupManagerP
 #[derive(Clone)]
 pub struct EccGroupManagerPublicKey<C: PssCompatibleEccCurve> {
     pk_m: C::Point,
-    pk_icc: C::Point
+    pk_icc: C::Point,
 }
 
 pub struct EccGroupManagerBaseIsImplicitInCurve;
@@ -339,10 +425,15 @@ impl<C: PssCompatibleEccCurve> GroupManagerPublicKey for EccGroupManagerPublicKe
         Self { pk_m, pk_icc }
     }
 
-    fn check_signature(&self, message: &[u8], pk_sector: &Self::PublicKey, signature: &Self::Signature) -> bool {
+    fn check_signature(
+        &self,
+        message: &[u8],
+        pk_sector: &Self::PublicKey,
+        signature: &Self::Signature,
+    ) -> bool {
         self.recover_c(message, pk_sector, signature) == signature.c
     }
-    
+
     fn from_generic_gpk(gpk: crate::GenericGroupManagerPublicKey, _g: Option<Box<[u8]>>) -> Self {
         let pk_m = C::Point::try_from(gpk.pk_m).map_err(|_| ()).unwrap();
         let pk_icc = C::Point::try_from(gpk.pk_icc).map_err(|_| ()).unwrap();
@@ -354,13 +445,18 @@ impl<C: PssCompatibleEccCurve> From<EccGroupManagerPublicKey<C>> for GenericGrou
     fn from(value: EccGroupManagerPublicKey<C>) -> Self {
         Self {
             pk_m: value.pk_m.into(),
-            pk_icc: value.pk_icc.into()
+            pk_icc: value.pk_icc.into(),
         }
     }
 }
 
 impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
-    pub(crate) fn recover_c(&self, message: &[u8], pk_sector: &C::Point, signature: &EccPssSignature<C>) -> C::Scalar {
+    pub(crate) fn recover_c(
+        &self,
+        message: &[u8],
+        pk_sector: &C::Point,
+        signature: &EccPssSignature<C>,
+    ) -> C::Scalar {
         let q1s1 = self.pk_icc.mul(&signature.c);
         //let q1s2 = SecretKey::new(signature.s1.into::<ScalarPrimitive<C>>()).public_key().to_projective();
         let q1s2 = signature.s1.to_point();
@@ -373,7 +469,7 @@ impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
                 let pk_s = pk_sector.mul(&signature.s1);
                 let a1 = sector_c.add(&pk_s);
                 Some((a1, pubkey))
-            },
+            }
             None => None,
         };
         let pseudonym2 = match signature.pseudonyms.1 {
@@ -382,11 +478,12 @@ impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
                 let pk_s = pk_sector.mul(&signature.s2);
                 let a2 = sector_c.add(&pk_s);
                 Some((a2, pubkey))
-            },
+            }
             None => None,
         };
 
-        let c_bytes = signature_hash::<C, sha3::Keccak256>(&q1, pseudonym1, pseudonym2, pk_sector, message);
+        let c_bytes =
+            signature_hash::<C, sha3::Keccak256>(&q1, pseudonym1, pseudonym2, pk_sector, message);
         let c = C::Scalar::from_hash(&c_bytes);
 
         c
@@ -397,11 +494,19 @@ impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
 mod tests {
     use std::ops::Sub;
 
-    use elliptic_curve::{sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint}, Curve, CurveArithmetic, ScalarPrimitive};
+    use elliptic_curve::{
+        sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint},
+        Curve, CurveArithmetic, ScalarPrimitive,
+    };
     use k256::Secp256k1;
     use rand_core::{CryptoRngCore, OsRng};
 
-    use crate::{ecc::{EccIcc, EccPssSignature, PssCompatibleEccCurve, Scalar}, rustcryptoecc::PssSecp256k1, GenericGroupManagerPublicKey, GenericPssSignature, GenericPublicKey, GroupManager, GroupManagerPublicKey, Icc, PssSigner};
+    use crate::{
+        ecc::{EccIcc, EccPssSignature, PssCompatibleEccCurve, Scalar},
+        rustcryptoecc::PssSecp256k1,
+        GenericGroupManagerPublicKey, GenericPssSignature, GenericPublicKey, GroupManager,
+        GroupManagerPublicKey, Icc, PssSigner,
+    };
 
     use super::{EccGroupManager, EccGroupManagerPublicKey};
 
@@ -427,7 +532,9 @@ mod tests {
         for (id1, id2) in combinations {
             let signer = icc.signer(&sector, id1, id2);
             let signature = signer.sign(SIGN_MESSAGE);
-            assert!(group_manager.public_key().check_signature(SIGN_MESSAGE, &sector, &signature));
+            assert!(group_manager
+                .public_key()
+                .check_signature(SIGN_MESSAGE, &sector, &signature));
         }
     }
 
@@ -441,7 +548,12 @@ mod tests {
         for (id1, id2) in combinations {
             let signer = icc.signer(&sector, id1, id2);
             let signature = signer.sign(SIGN_MESSAGE);
-            fn tamper_with<C: PssCompatibleEccCurve>(signature: &mut EccPssSignature<C>, c: bool, s1: bool, s2: bool) {
+            fn tamper_with<C: PssCompatibleEccCurve>(
+                signature: &mut EccPssSignature<C>,
+                c: bool,
+                s1: bool,
+                s2: bool,
+            ) {
                 if c {
                     signature.c = signature.c.sub(&C::Scalar::random(&mut OsRng::default()));
                 }
@@ -452,30 +564,103 @@ mod tests {
                     signature.s2 = signature.s2.sub(&C::Scalar::random(&mut OsRng::default()));
                 }
             }
-            let combinations = vec![(true, true, true), (true, true, false), (true, false, true), (true, false, false), (false, true, true), (false, true, false), (false, false, true)];
+            let combinations = vec![
+                (true, true, true),
+                (true, true, false),
+                (true, false, true),
+                (true, false, false),
+                (false, true, true),
+                (false, true, false),
+                (false, false, true),
+            ];
             for (c, s1, s2) in combinations {
                 let mut signature_to_tamper_with = signature.clone();
                 tamper_with(&mut signature_to_tamper_with, c, s1, s2);
-                assert!(!group_manager.public_key().check_signature(SIGN_MESSAGE, &sector, &signature_to_tamper_with), "signature was tampered with but still valid! c={} s1={} s2={}", c, s1, s2);
+                assert!(
+                    !group_manager.public_key().check_signature(
+                        SIGN_MESSAGE,
+                        &sector,
+                        &signature_to_tamper_with
+                    ),
+                    "signature was tampered with but still valid! c={} s1={} s2={}",
+                    c,
+                    s1,
+                    s2
+                );
             }
         }
     }
 
     #[test]
     fn sol_test_values() {
-        let gpk = EccGroupManagerPublicKey::<PssSecp256k1>::from_generic_gpk(GenericGroupManagerPublicKey {
-            pk_m: [0x04, 0xb8, 0x0b, 0xc3, 0xa3, 0x02, 0x99, 0xf7, 0xe9, 0x64, 0x8c, 0x14, 0x1d, 0x93, 0xfb, 0x9d, 0x61, 0xad, 0x62, 0x57, 0xba, 0xfe, 0x1e, 0x5d, 0x93, 0xe4, 0xaf, 0xa8, 0xf3, 0x0e, 0x19, 0xe0, 0x0e, 0xd7, 0x01, 0x07, 0x2c, 0x1f, 0x7f, 0xa5, 0x64, 0x63, 0x14, 0x48, 0x69, 0xb6, 0x80, 0x6a, 0x1b, 0x3d, 0xd9, 0x50, 0xc9, 0xbd, 0x8e, 0x52, 0x6c, 0x6a, 0xdd, 0xd9, 0x9a, 0xb8, 0x55, 0x0b, 0x56].into(),
-            pk_icc: [0x04, 0x53, 0x4c, 0x69, 0x71, 0x22, 0x44, 0x8f, 0x26, 0x79, 0x68, 0x06, 0x3d, 0x02, 0xd0, 0x1c, 0x0c, 0xf4, 0x41, 0x88, 0xd9, 0x6c, 0xd9, 0x95, 0x14, 0x60, 0x7d, 0xba, 0xd6, 0xf4, 0x95, 0x59, 0x50, 0x11, 0xc9, 0xf3, 0x56, 0xfb, 0xe8, 0x28, 0x1c, 0xb8, 0x33, 0xf2, 0x32, 0xe2, 0x15, 0xa7, 0xc8, 0x6a, 0x7c, 0xc5, 0xf3, 0xac, 0x10, 0x10, 0x45, 0xaf, 0x08, 0x48, 0xe9, 0x86, 0x81, 0xb7, 0xb8].into()
-        }, None);
-        let pk_sector_data: Box<[u8]> = [0x04, 0x8b, 0x3d, 0xee, 0xee, 0xe0, 0x7d, 0x19, 0x88, 0x0f, 0x86, 0x47, 0x72, 0xfc, 0x54, 0xa7, 0x11, 0x20, 0x0c, 0x74, 0x86, 0xef, 0x40, 0xa3, 0x35, 0x7e, 0x57, 0x37, 0xc8, 0x37, 0xb2, 0xca, 0xd1, 0x7a, 0x08, 0x73, 0xe0, 0x5a, 0xec, 0x94, 0x40, 0x06, 0xbe, 0xe4, 0xc1, 0x01, 0x20, 0x79, 0x88, 0x8c, 0x36, 0x3a, 0x6a, 0xac, 0xe0, 0xe6, 0x51, 0x92, 0x2f, 0xfa, 0xe6, 0xf1, 0x16, 0xff, 0x08].into();
+        let gpk = EccGroupManagerPublicKey::<PssSecp256k1>::from_generic_gpk(
+            GenericGroupManagerPublicKey {
+                pk_m: [
+                    0x04, 0xb8, 0x0b, 0xc3, 0xa3, 0x02, 0x99, 0xf7, 0xe9, 0x64, 0x8c, 0x14, 0x1d,
+                    0x93, 0xfb, 0x9d, 0x61, 0xad, 0x62, 0x57, 0xba, 0xfe, 0x1e, 0x5d, 0x93, 0xe4,
+                    0xaf, 0xa8, 0xf3, 0x0e, 0x19, 0xe0, 0x0e, 0xd7, 0x01, 0x07, 0x2c, 0x1f, 0x7f,
+                    0xa5, 0x64, 0x63, 0x14, 0x48, 0x69, 0xb6, 0x80, 0x6a, 0x1b, 0x3d, 0xd9, 0x50,
+                    0xc9, 0xbd, 0x8e, 0x52, 0x6c, 0x6a, 0xdd, 0xd9, 0x9a, 0xb8, 0x55, 0x0b, 0x56,
+                ]
+                .into(),
+                pk_icc: [
+                    0x04, 0x53, 0x4c, 0x69, 0x71, 0x22, 0x44, 0x8f, 0x26, 0x79, 0x68, 0x06, 0x3d,
+                    0x02, 0xd0, 0x1c, 0x0c, 0xf4, 0x41, 0x88, 0xd9, 0x6c, 0xd9, 0x95, 0x14, 0x60,
+                    0x7d, 0xba, 0xd6, 0xf4, 0x95, 0x59, 0x50, 0x11, 0xc9, 0xf3, 0x56, 0xfb, 0xe8,
+                    0x28, 0x1c, 0xb8, 0x33, 0xf2, 0x32, 0xe2, 0x15, 0xa7, 0xc8, 0x6a, 0x7c, 0xc5,
+                    0xf3, 0xac, 0x10, 0x10, 0x45, 0xaf, 0x08, 0x48, 0xe9, 0x86, 0x81, 0xb7, 0xb8,
+                ]
+                .into(),
+            },
+            None,
+        );
+        let pk_sector_data: Box<[u8]> = [
+            0x04, 0x8b, 0x3d, 0xee, 0xee, 0xe0, 0x7d, 0x19, 0x88, 0x0f, 0x86, 0x47, 0x72, 0xfc,
+            0x54, 0xa7, 0x11, 0x20, 0x0c, 0x74, 0x86, 0xef, 0x40, 0xa3, 0x35, 0x7e, 0x57, 0x37,
+            0xc8, 0x37, 0xb2, 0xca, 0xd1, 0x7a, 0x08, 0x73, 0xe0, 0x5a, 0xec, 0x94, 0x40, 0x06,
+            0xbe, 0xe4, 0xc1, 0x01, 0x20, 0x79, 0x88, 0x8c, 0x36, 0x3a, 0x6a, 0xac, 0xe0, 0xe6,
+            0x51, 0x92, 0x2f, 0xfa, 0xe6, 0xf1, 0x16, 0xff, 0x08,
+        ]
+        .into();
         let pk_sector = pk_sector_data.try_into().unwrap();
         let signature = GenericPssSignature {
-            c: [0xdd, 0xde, 0xdb, 0xb7, 0x38, 0x09, 0xfa, 0x73, 0x13, 0x2c, 0xe0, 0xd9, 0x46, 0xbf, 0xde, 0x58, 0x9c, 0xcc, 0x04, 0x8a, 0xe3, 0xb8, 0x60, 0xab, 0x31, 0x48, 0x40, 0x93, 0x8d, 0xa9, 0x12, 0xa8].into(),
-            s1: [0x8c, 0x00, 0xd3, 0x9c, 0x38, 0x37, 0x0e, 0x8a, 0xd9, 0x20, 0x6d, 0x32, 0xdd, 0x0d, 0xf3, 0x20, 0xa2, 0x80, 0x34, 0x0e, 0x7f, 0x05, 0x0a, 0x35, 0x8e, 0xaf, 0xef, 0x39, 0x9a, 0x29, 0x73, 0xc7].into(),
-            s2: [0xe5, 0x05, 0x41, 0x06, 0xe0, 0x49, 0x79, 0x5c, 0xc3, 0x12, 0x62, 0x20, 0xd9, 0x3d, 0x77, 0x3e, 0xd1, 0x7c, 0x23, 0xca, 0x9a, 0x24, 0x09, 0xfb, 0x6b, 0x4f, 0x27, 0xa6, 0x22, 0xf9, 0x4b, 0xd2].into(),
-            pseudonym1: Some([0x03, 0x70, 0xaf, 0xa9, 0x71, 0x24, 0x73, 0x33, 0x83, 0x66, 0xd0, 0x03, 0x7e, 0x10, 0xd1, 0xd1, 0xe9, 0xdd, 0x56, 0xa4, 0x37, 0x72, 0x41, 0x4e, 0xd7, 0x31, 0xc2, 0x90, 0x69, 0x3e, 0xf5, 0x3a, 0x44].into()),
-            pseudonym2: Some([0x02, 0x93, 0x54, 0xda, 0x7c, 0x85, 0xf6, 0x3b, 0xe2, 0xd1, 0x09, 0x30, 0x17, 0x13, 0x84, 0x89, 0x75, 0x33, 0x4b, 0x4d, 0xbf, 0x03, 0xee, 0xab, 0x4b, 0x9d, 0x22, 0x18, 0xbd, 0x97, 0xb3, 0xf9, 0xc2].into())
-        }.try_into().unwrap();
+            c: [
+                0xdd, 0xde, 0xdb, 0xb7, 0x38, 0x09, 0xfa, 0x73, 0x13, 0x2c, 0xe0, 0xd9, 0x46, 0xbf,
+                0xde, 0x58, 0x9c, 0xcc, 0x04, 0x8a, 0xe3, 0xb8, 0x60, 0xab, 0x31, 0x48, 0x40, 0x93,
+                0x8d, 0xa9, 0x12, 0xa8,
+            ]
+            .into(),
+            s1: [
+                0x8c, 0x00, 0xd3, 0x9c, 0x38, 0x37, 0x0e, 0x8a, 0xd9, 0x20, 0x6d, 0x32, 0xdd, 0x0d,
+                0xf3, 0x20, 0xa2, 0x80, 0x34, 0x0e, 0x7f, 0x05, 0x0a, 0x35, 0x8e, 0xaf, 0xef, 0x39,
+                0x9a, 0x29, 0x73, 0xc7,
+            ]
+            .into(),
+            s2: [
+                0xe5, 0x05, 0x41, 0x06, 0xe0, 0x49, 0x79, 0x5c, 0xc3, 0x12, 0x62, 0x20, 0xd9, 0x3d,
+                0x77, 0x3e, 0xd1, 0x7c, 0x23, 0xca, 0x9a, 0x24, 0x09, 0xfb, 0x6b, 0x4f, 0x27, 0xa6,
+                0x22, 0xf9, 0x4b, 0xd2,
+            ]
+            .into(),
+            pseudonym1: Some(
+                [
+                    0x03, 0x70, 0xaf, 0xa9, 0x71, 0x24, 0x73, 0x33, 0x83, 0x66, 0xd0, 0x03, 0x7e,
+                    0x10, 0xd1, 0xd1, 0xe9, 0xdd, 0x56, 0xa4, 0x37, 0x72, 0x41, 0x4e, 0xd7, 0x31,
+                    0xc2, 0x90, 0x69, 0x3e, 0xf5, 0x3a, 0x44,
+                ]
+                .into(),
+            ),
+            pseudonym2: Some(
+                [
+                    0x02, 0x93, 0x54, 0xda, 0x7c, 0x85, 0xf6, 0x3b, 0xe2, 0xd1, 0x09, 0x30, 0x17,
+                    0x13, 0x84, 0x89, 0x75, 0x33, 0x4b, 0x4d, 0xbf, 0x03, 0xee, 0xab, 0x4b, 0x9d,
+                    0x22, 0x18, 0xbd, 0x97, 0xb3, 0xf9, 0xc2,
+                ]
+                .into(),
+            ),
+        }
+        .try_into()
+        .unwrap();
         let message = [0x00, 0x01, 0x02];
         assert!(gpk.check_signature(&message, &pk_sector, &signature));
     }
