@@ -76,6 +76,10 @@ pub struct JsGroupManagerPrivateKey {
 #[wasm_bindgen]
 impl JsGroupManagerPrivateKey {
     #[wasm_bindgen(constructor)]
+    pub fn new(sk_m: Uint8Array, sk_icc: Uint8Array) -> Self {
+        Self { sk_m, sk_icc }
+    }
+
     pub fn generate(algorithm: Algorithm) -> Self {
         match algorithm {
             #[cfg(feature = "dh")]
@@ -283,6 +287,11 @@ pub struct JsIccSecretKey {
 
 #[wasm_bindgen]
 impl JsIccSecretKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(sk_icc_1_u: Uint8Array, sk_icc_2_u: Uint8Array) -> Self {
+        Self { sk_icc_1_u, sk_icc_2_u }
+    }
+
     pub fn sign(
         &self,
         algorithm: Algorithm,
