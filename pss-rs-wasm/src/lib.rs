@@ -1,4 +1,4 @@
-use k256::Secp256k1;
+
 use pss_rs::{
     ecc::{EccGroupManager, EccIcc},
     rustcryptoecc::PssSecp256k1,

@@ -4,17 +4,13 @@ use crate::{
 };
 
 use crypto_bigint::{generic_array::GenericArray, rand_core::OsRng};
-use elliptic_curve::{
-    point::PointCompression,
-    sec1::{FromEncodedPoint, ModulusSize},
-    Curve, CurveArithmetic, PublicKey, SecretKey,
-};
-use k256::elliptic_curve::{sec1::ToEncodedPoint, PrimeField, ScalarPrimitive};
+
+
 use rand_core::CryptoRngCore;
 use sha3::Digest;
 use std::{
     marker::PhantomData,
-    ops::{Add, Mul, Rem, Sub},
+    ops::{Add, Mul, Sub},
 };
 
 const ID_DSI: &[u8] = b"ECC-KECCAK256";
@@ -494,17 +490,14 @@ impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
 mod tests {
     use std::ops::Sub;
 
-    use elliptic_curve::{
-        sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint},
-        Curve, CurveArithmetic, ScalarPrimitive,
-    };
-    use k256::Secp256k1;
-    use rand_core::{CryptoRngCore, OsRng};
+    
+    
+    use rand_core::{OsRng};
 
     use crate::{
         ecc::{EccIcc, EccPssSignature, PssCompatibleEccCurve, Scalar},
         rustcryptoecc::PssSecp256k1,
-        GenericGroupManagerPublicKey, GenericPssSignature, GenericPublicKey, GroupManager,
+        GenericGroupManagerPublicKey, GenericPssSignature, GroupManager,
         GroupManagerPublicKey, Icc, PssSigner,
     };
 

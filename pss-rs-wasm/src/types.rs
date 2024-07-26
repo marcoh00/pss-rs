@@ -10,7 +10,7 @@ use pss_rs::{
     ecc::{EccGroupManager, EccGroupManagerPublicKey, EccIcc, EccPssSignature},
     rustcryptoecc::PssSecp256k1,
     GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey,
-    GenericPssSignature, GenericPublicKey, GroupManager, GroupManagerPublicKey, Icc, PssSignature,
+    GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature,
     PssSigner,
 };
 

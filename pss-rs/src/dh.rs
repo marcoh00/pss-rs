@@ -11,7 +11,7 @@ use sha3::{digest::OutputSizeUser, Digest};
 
 use crate::{
     mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey,
-    GenericPssSignature, GenericPublicKey, GroupManager, GroupManagerPublicKey, Icc, PssSignature,
+    GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature,
     PssSigner,
 };
 
