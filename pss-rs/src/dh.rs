@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Deref};
 
 pub use crypto_bigint::{Uint, modular::constant_mod::ResidueParams, ConcatMixed};
 
@@ -10,18 +10,62 @@ use crate::{mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey
 const DH_MODP_2048_MODULUS_HEX: &str = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
 impl_modulus!(DhModp2048Modulus, U2048, DH_MODP_2048_MODULUS_HEX);
 const DH_MODP_2048_GENERATOR: U2048 = U2048::from_u8(2);
-pub const DH_MODP_2048: Residue<DhModp2048Modulus, { U2048::LIMBS }> = const_residue!(DH_MODP_2048_GENERATOR, DhModp2048Modulus);
+pub const DH_MODP_2048_RESIDUE: Residue<DhModp2048Modulus, { U2048::LIMBS }> = const_residue!(DH_MODP_2048_GENERATOR, DhModp2048Modulus);
+pub const DH_MODP_2048: PssDhPublicKey<DhModp2048Modulus, { U2048::LIMBS }> = PssDhPublicKey(DH_MODP_2048_RESIDUE);
 
 const DH_TINY_TEST_INSECURE_MODULUS_HEX: &str = "000000000000001F";
 impl_modulus!(DhTinyTestInsecureModulus, U64, DH_TINY_TEST_INSECURE_MODULUS_HEX);
 const DH_TINY_TEST_INSECURE_GENERATOR: U64 = U64::from_u8(3);
 pub const DH_TINY_TEST: Residue<DhTinyTestInsecureModulus, { U64::LIMBS }> = const_residue!(DH_TINY_TEST_INSECURE_GENERATOR, DhTinyTestInsecureModulus);
 
-type PkSector<const LIMBS: usize, MOD> = Residue<MOD, LIMBS>;
-
 const ID_DSI: &[u8] = b"TODO replace with algorithm id";
 
-fn signature_hash<const LIMBS: usize, MOD: ResidueParams<LIMBS>, T: AsRef<[u8]>>(q: &Residue<MOD, LIMBS>, a1_i_sector_icc_1: Option<(Residue<MOD, LIMBS>, &Residue<MOD, LIMBS>)>, a2_i_sector_icc_2: Option<(Residue<MOD, LIMBS>, &Residue<MOD, LIMBS>)>, pk_sector: &PkSector<LIMBS, MOD>, message: &[u8]) -> GenericArray<u8, <sha3::Keccak256 as OutputSizeUser>::OutputSize>
+#[derive(Clone, Debug)]
+pub struct PssDhPublicKey<MOD: ResidueParams<LIMBS>, const LIMBS: usize> (Residue<MOD, LIMBS>);
+
+impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> From<Residue<MOD, LIMBS>> for PssDhPublicKey<MOD, LIMBS> {
+    fn from(value: Residue<MOD, LIMBS>) -> Self {
+        Self(value)
+    }
+}
+
+impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> Into<Residue<MOD, LIMBS>> for PssDhPublicKey<MOD, LIMBS> {
+    fn into(self) -> Residue<MOD, LIMBS> {
+        self.0
+    }
+}
+
+impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> AsRef<Residue<MOD, LIMBS>> for PssDhPublicKey<MOD, LIMBS> {
+    fn as_ref(&self) -> &Residue<MOD, LIMBS> {
+        &self.0
+    }
+}
+
+impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> Deref for PssDhPublicKey<MOD, LIMBS> {
+    type Target = Residue<MOD, LIMBS>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> TryFrom<Box<[u8]>> for PssDhPublicKey<MOD, LIMBS> {
+    type Error = ();
+
+    fn try_from(value: Box<[u8]>) -> Result<Self, Self::Error> {
+        Ok(Self(Residue::new(&Uint::from_be_slice(&value)).into()))
+    }
+}
+
+impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> Into<Box<[u8]>> for PssDhPublicKey<MOD, LIMBS> where Uint<LIMBS>: Encoding {
+    fn into(self) -> Box<[u8]> {
+        self.0.retrieve().to_be_bytes().as_ref().into()
+    }
+}
+
+type PkSector<const LIMBS: usize, MOD> = PssDhPublicKey<MOD, LIMBS>;
+
+fn signature_hash<const LIMBS: usize, MOD: ResidueParams<LIMBS>, T: AsRef<[u8]>>(q: &PssDhPublicKey<MOD, LIMBS>, a1_i_sector_icc_1: Option<(PssDhPublicKey<MOD, LIMBS>, &PssDhPublicKey<MOD, LIMBS>)>, a2_i_sector_icc_2: Option<(PssDhPublicKey<MOD, LIMBS>, &PssDhPublicKey<MOD, LIMBS>)>, pk_sector: &PkSector<LIMBS, MOD>, message: &[u8]) -> GenericArray<u8, <sha3::Keccak256 as OutputSizeUser>::OutputSize>
 where Uint<LIMBS>: Encoding<Repr = T> {
     let mut c_message_buffer = Vec::new();
     c_message_buffer.extend_from_slice(&q.retrieve().to_be_bytes().as_ref());
@@ -41,34 +85,18 @@ where Uint<LIMBS>: Encoding<Repr = T> {
     sha3::Keccak256::digest(&c_message_buffer)
 }
 
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> From<Residue<MOD, LIMBS>> for GenericPublicKey
-where Uint<LIMBS>: Encoding {
-    fn from(value: Residue<MOD, LIMBS>) -> Self {
-        Self(value.retrieve().to_be_bytes().as_ref().into())
-    }
-}
-
-impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> TryFrom<GenericPublicKey> for Residue<MOD, LIMBS>
-where Uint<LIMBS>: Encoding {
-    type Error = ();
-
-    fn try_from(value: GenericPublicKey) -> Result<Residue<MOD, LIMBS>, Self::Error> {
-        Ok(Residue::new(&Uint::from_be_slice(&value.0)))
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct GroupPssSignature<const LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding {
     c: Uint<LIMBS>,
     s1: Uint<LIMBS>,
     s2: Uint<LIMBS>,
-    pseudonyms: (Option<Residue<MOD, LIMBS>>, Option<Residue<MOD, LIMBS>>)
+    pseudonyms: (Option<PssDhPublicKey<MOD, LIMBS>>, Option<PssDhPublicKey<MOD, LIMBS>>)
 }
 
 impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> PssSignature for GroupPssSignature<LIMBS, MOD>
 where Uint<LIMBS> : Encoding {
-    type PublicKey = Residue<MOD, LIMBS>;
+    type PublicKey = PssDhPublicKey<MOD, LIMBS>;
     type Scalar = Uint<LIMBS>;
 
     fn c(&self) -> &Self::Scalar {
@@ -103,8 +131,8 @@ where Uint<LIMBS> : Encoding {
                 s1: Uint::from_be_slice(&value.c),
                 s2: Uint::from_be_slice(&value.c),
                 pseudonyms: (
-                    value.pseudonym1.map(|p| Residue::new(&Uint::from_be_slice(&p))),
-                    value.pseudonym2.map(|p| Residue::new(&Uint::from_be_slice(&p)))
+                    value.pseudonym1.map(|p| Residue::new(&Uint::from_be_slice(&p)).into()),
+                    value.pseudonym2.map(|p| Residue::new(&Uint::from_be_slice(&p)).into())
                 )
             }
         )
@@ -127,13 +155,13 @@ where Uint<LIMBS> : Encoding {
 #[derive(Debug)]
 pub struct GroupPssSigner<'a, const LIMBS: usize, MOD: ResidueParams<LIMBS>>
 where Uint<LIMBS>: Encoding {
-    g: &'a Residue<MOD, LIMBS>,
+    g: &'a PssDhPublicKey<MOD, LIMBS>,
     sk_icc_1_u: &'a Uint<LIMBS>,
     sk_icc_2_u: &'a Uint<LIMBS>,
-    pk_sector: &'a Residue<MOD, LIMBS>,
-    pk_m: &'a Residue<MOD, LIMBS>,
-    i_sector_icc_1: Option<Residue<MOD, LIMBS>>,
-    i_sector_icc_2: Option<Residue<MOD, LIMBS>>,
+    pk_sector: &'a PssDhPublicKey<MOD, LIMBS>,
+    pk_m: &'a PssDhPublicKey<MOD, LIMBS>,
+    i_sector_icc_1: Option<PssDhPublicKey<MOD, LIMBS>>,
+    i_sector_icc_2: Option<PssDhPublicKey<MOD, LIMBS>>,
 }
 
 impl<'a, const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> PssSigner for GroupPssSigner<'a, LIMBS, MOD>
@@ -148,16 +176,16 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
 
         let g_k1 = self.g.pow(&k1);
         let pk_m_k2 = self.pk_m.pow(&k2);
-        let q = g_k1.mul(&pk_m_k2);
+        let q = g_k1.mul(&pk_m_k2).into();
 
         // println!("Q = g^k1 * PK_m^k2 = {}^{} * {}^{} = {} * {} = {}", self.g.retrieve(), k1, self.pk_m.retrieve(), k2, g_k1.retrieve(), pk_m_k2.retrieve(), q.retrieve());
 
         let pseudonym1 = match self.i_sector_icc_1 {
-            Some(ref pubkey) => Some((self.pk_sector.pow(&k1), pubkey)),
+            Some(ref pubkey) => Some((self.pk_sector.pow(&k1).into(), pubkey)),
             None => None
         };
         let pseudonym2 = match self.i_sector_icc_2 {
-            Some(ref pubkey) => Some((self.pk_sector.pow(&k2), pubkey)),
+            Some(ref pubkey) => Some((self.pk_sector.pow(&k2).into(), pubkey)),
             None => None
         };
 
@@ -185,20 +213,20 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
             s1,
             s2,
             pseudonyms: (
-                self.i_sector_icc_1,
-                self.i_sector_icc_2
+                self.i_sector_icc_1.clone(),
+                self.i_sector_icc_2.clone()
             )
         }
     }
 }
 
 pub struct GroupSectorSpecificIdentifiers<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
-    i_sector_icc_1: Residue<MOD, LIMBS>,
-    i_sector_icc_2: Residue<MOD, LIMBS>
+    i_sector_icc_1: PssDhPublicKey<MOD, LIMBS>,
+    i_sector_icc_2: PssDhPublicKey<MOD, LIMBS>
 }
 
 impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupSectorSpecificIdentifiers<LIMBS, MOD> {
-    pub fn new(i_sector_icc_1: Residue<MOD, LIMBS>, i_sector_icc_2: Residue<MOD, LIMBS>) -> Self {
+    pub fn new(i_sector_icc_1: PssDhPublicKey<MOD, LIMBS>, i_sector_icc_2: PssDhPublicKey<MOD, LIMBS>) -> Self {
         Self { i_sector_icc_1, i_sector_icc_2 }
     }
 }
@@ -217,7 +245,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
     type GroupManagerPublicKey = GroupGroupManagerPublicKey<LIMBS, MOD>;
     type SecretKey = Uint<LIMBS>;
     type SectorSpecificIdentifiers = GroupSectorSpecificIdentifiers<LIMBS, MOD>;
-    type PublicKey = Residue<MOD, LIMBS>;
+    type PublicKey = PssDhPublicKey<MOD, LIMBS>;
     type Signer<'a> = GroupPssSigner<'a, LIMBS, MOD>;
 
     fn new(gpk: GroupGroupManagerPublicKey<LIMBS, MOD>, sk_icc_1_u: Uint<LIMBS>, sk_icc_2_u: Uint<LIMBS>) -> Self {
@@ -229,7 +257,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
     fn sector_identifiers(&self, pk_sector: &PkSector<LIMBS, MOD>) -> GroupSectorSpecificIdentifiers<LIMBS, MOD> {
         let i_sector_icc_1 = pk_sector.pow(&self.sk_icc_1_u);
         let i_sector_icc_2 = pk_sector.pow(&self.sk_icc_2_u);
-        GroupSectorSpecificIdentifiers::new(i_sector_icc_1, i_sector_icc_2)
+        GroupSectorSpecificIdentifiers::new(i_sector_icc_1.into(), i_sector_icc_2.into())
     }
 
     fn signer<'a>(&'a self, pk_sector: &'a PkSector<LIMBS, MOD>, use_identifier1: bool, use_identifier2: bool) -> GroupPssSigner<'a, LIMBS, MOD> {
@@ -282,18 +310,18 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
 
 #[derive(Clone, Debug)]
 pub struct GroupGroupManagerPublicKey<const LIMBS: usize, MOD: ResidueParams<LIMBS>> {
-    g: Residue<MOD, LIMBS>,
-    pk_icc: Residue<MOD, LIMBS>,
-    pk_m: Residue<MOD, LIMBS>
+    g: PssDhPublicKey<MOD, LIMBS>,
+    pk_icc: PssDhPublicKey<MOD, LIMBS>,
+    pk_m: PssDhPublicKey<MOD, LIMBS>
 }
 
 impl<const LIMBS: usize, MOD: ResidueParams<LIMBS>> GroupManagerPublicKey for GroupGroupManagerPublicKey<LIMBS, MOD>
 where Uint<LIMBS>: Encoding {
-    type PublicKey = Residue<MOD, LIMBS>;
+    type PublicKey = PssDhPublicKey<MOD, LIMBS>;
     type Signature = GroupPssSignature<LIMBS, MOD>;
-    type Base = Residue<MOD, LIMBS>;
+    type Base = PssDhPublicKey<MOD, LIMBS>;
 
-    fn new(pk_icc: Residue<MOD, LIMBS>, pk_m: Residue<MOD, LIMBS>, g: Option<Residue<MOD, LIMBS>>) -> Self {
+    fn new(pk_icc: PssDhPublicKey<MOD, LIMBS>, pk_m: PssDhPublicKey<MOD, LIMBS>, g: Option<PssDhPublicKey<MOD, LIMBS>>) -> Self {
         Self { g: g.unwrap(), pk_icc, pk_m }
     }
 
@@ -303,9 +331,9 @@ where Uint<LIMBS>: Encoding {
     
     fn from_generic_gpk(gpk: crate::GenericGroupManagerPublicKey, g: Option<Box<[u8]>>) -> Self {
         Self {
-            g: Residue::new(&Uint::from_be_slice(&g.unwrap())),
-            pk_icc: Residue::new(&Uint::from_be_slice(&gpk.pk_icc)),
-            pk_m: Residue::new(&Uint::from_be_slice(&gpk.pk_m))
+            g: Residue::new(&Uint::from_be_slice(&g.unwrap())).into(),
+            pk_icc: Residue::new(&Uint::from_be_slice(&gpk.pk_icc)).into(),
+            pk_m: Residue::new(&Uint::from_be_slice(&gpk.pk_m)).into()
         }
     }
 }
@@ -326,7 +354,7 @@ where Uint<LIMBS>: Encoding {
         let pk_icc_c = self.pk_icc.pow(&signature.c);
         let g_s1 = self.g.pow(&signature.s1);
         let pk_m_s2 = self.pk_m.pow(&signature.s2);
-        let q = pk_icc_c.mul(&g_s1).mul(&pk_m_s2);
+        let q = pk_icc_c.mul(&g_s1).mul(&pk_m_s2).into();
 
         // println!("Q' = PK_icc^c * g^s1 * PK_m^s2 = {} * {} * {} = {}", pk_icc_c.retrieve(), g_s1.retrieve(), pk_m_s2.retrieve(), q.retrieve());
 
@@ -336,7 +364,7 @@ where Uint<LIMBS>: Encoding {
                 let pk_s = pk_sector.pow(&signature.s1);
                 let a1 = sector_c.mul(&pk_s);
                 // println!("A1' = I_icc_1^c * PK_sector^s1 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s1, sector_c.retrieve(), pk_s.retrieve(), a1.retrieve());
-                Some((a1, pubkey))
+                Some((a1.into(), pubkey))
             },
             None => None,
         };
@@ -346,7 +374,7 @@ where Uint<LIMBS>: Encoding {
                 let pk_s = pk_sector.pow(&signature.s2);
                 let a2 = sector_c.mul(&pk_s);
                 // println!("A2' = I_icc_2^c * PK_sector^s2 = {}^{} * {}^{} = {} * {} = {}", pubkey.retrieve(), signature.c, pk_sector.retrieve(), signature.s2, sector_c.retrieve(), pk_s.retrieve(), a2.retrieve());
-                Some((a2, pubkey))
+                Some((a2.into(), pubkey))
             },
             None => None,
         };
@@ -376,13 +404,13 @@ impl<const LIMBS: usize, const WIDE_LIMBS: usize, MOD: ResidueParams<LIMBS>> Gro
 where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<WIDE_LIMBS>: SplitMixed<Uint<LIMBS>, Uint<LIMBS>> {
     type SecretKey = Uint<LIMBS>;
     
-    type PublicKey = Residue<MOD, LIMBS>;
+    type PublicKey = PssDhPublicKey<MOD, LIMBS>;
     
     type GroupManagerPublicKey = GroupGroupManagerPublicKey<LIMBS, MOD>;
     
     type Icc = GroupIcc<LIMBS, WIDE_LIMBS, MOD>;
     
-    type Base = Residue<MOD, LIMBS>;
+    type Base = PssDhPublicKey<MOD, LIMBS>;
 
 
     fn new(g: Option<Self::Base>) -> Self {
@@ -399,13 +427,13 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         // println!("g = {}, SK_m = {}, SK_icc = {}", g.retrieve(), sk_m, sk_icc);
         // println!("PK_m = g^SK_m = {}^{} = {}", g.retrieve(), sk_m, pk_m.retrieve());
         // println!("PK_icc = g^SK_icc = {}^{} = {}", g.retrieve(), sk_icc, pk_icc.retrieve());
-        let gpk = GroupGroupManagerPublicKey::new(pk_icc, pk_m, Some(g));
+        let gpk = GroupGroupManagerPublicKey::new(pk_icc.into(), pk_m.into(), Some(g.into()));
         Self { sk_m, sk_icc, gpk, sectors: Vec::new(), _mod: PhantomData }
     }
 
     fn renew_icc(&mut self) -> Uint<LIMBS> {
         let mut sk_icc = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        self.gpk.pk_icc = self.gpk.g.pow(&sk_icc);
+        self.gpk.pk_icc = self.gpk.g.pow(&sk_icc).into();
         std::mem::swap(&mut self.sk_icc, &mut sk_icc);
         sk_icc
     }
@@ -416,7 +444,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
 
     fn new_sector(&mut self, deanonymizable: bool) -> PkSector<LIMBS, MOD> {
         let sk_sector = Uint::<LIMBS>::random_mod(&mut OsRng::default(), &NonZero::from_uint(MOD::MODULUS));
-        let pk_sector = self.gpk.g.pow(&sk_sector);
+        let pk_sector = PssDhPublicKey(self.gpk.g.pow(&sk_sector));
 
         // println!("SK_sector = {}", sk_sector);
         // println!("PK_sector = g^SK_sector = {}^{} = {}", self.gpk.g.retrieve(), sk_sector, pk_sector.retrieve());
@@ -444,7 +472,7 @@ where Uint<LIMBS>: Encoding + ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>, Uint<
         let sk_m = Uint::from_be_slice(&secret_key.sk_m);
         let sk_icc = Uint::from_be_slice(&secret_key.sk_icc);
         let g = Residue::new(&Uint::from_be_slice(&g.unwrap()));
-        Self::new_from_secret_parts(sk_m, sk_icc, Some(g))
+        Self::new_from_secret_parts(sk_m, sk_icc, Some(g.into()))
     }
 
 }

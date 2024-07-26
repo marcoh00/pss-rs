@@ -1,17 +1,9 @@
-#[cfg(feature = "wasm")]
-use wasm_bindgen::prelude::*;
-
 use crypto_bigint::{ConcatMixed, NonZero, Uint};
 
 pub mod ecc;
-#[cfg(feature = "dh")]
-pub mod group;
 pub mod rustcryptoecc;
-
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
-pub fn hee() {
-    println!("hello");
-}
+#[cfg(feature = "dh")]
+pub mod dh;
 
 fn mul_mod<const LIMBS: usize, const WIDE_LIMBS: usize>(a: &Uint<LIMBS>, b: &Uint<LIMBS>, p: &Uint<LIMBS>) -> Uint<LIMBS>
 where Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>> {
