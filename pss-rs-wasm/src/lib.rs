@@ -1,5 +1,5 @@
 use k256::Secp256k1;
-use pss_rs::{rustcryptoecc::{EccGroupManager, EccIcc}, GroupManager, Icc, PssSigner};
+use pss_rs::{ecc::{EccGroupManager, EccIcc}, rustcryptoecc::PssSecp256k1, GroupManager, Icc, PssSigner};
 
 #[allow(long_running_const_eval)]
 use wasm_bindgen::prelude::*;
@@ -9,7 +9,7 @@ use types::*;
 
 #[cfg(feature = "dh")]
 mod dh {
-    pub use pss_rs::group::{GroupGroupManager, DH_MODP_2048};
+    pub use pss_rs::dh::{GroupGroupManager, DH_MODP_2048};
 }
 
 #[wasm_bindgen]
@@ -50,7 +50,7 @@ pub fn sig_new_ident(alg: Algorithm, msg: &[u8]) -> TSystem {
         Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
         Algorithm::Secp256k1 => {
             let mut gm = EccGroupManager::new(None);
-            let icc: EccIcc<Secp256k1> = gm.new_icc();
+            let icc: EccIcc<PssSecp256k1> = gm.new_icc();
             let sector = gm.new_sector(false);
             let signer = icc.signer(&sector, true, true);
             let signature = signer.sign(msg);
