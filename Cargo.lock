@@ -267,7 +267,9 @@ dependencies = [
  "crypto-bigint",
  "elliptic-curve",
  "getrandom",
+ "group",
  "k256",
+ "rand_core",
  "sha3",
  "wasm-bindgen",
 ]
