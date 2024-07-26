@@ -1,6 +1,11 @@
 use js_sys::{wasm_bindgen, Uint8Array};
-use k256::{elliptic_curve::{bigint::{ConcatMixed, Integer}, Curve}, Secp256k1};
-use pss_rs::{rustcryptoecc::{EccGroupManager, EccGroupManagerPublicKey, EccIcc, EccPssSignature}, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey, GenericPssSignature, GenericPublicKey, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner};
+use pss_rs::{
+    ecc::{EccGroupManager, EccGroupManagerPublicKey, EccIcc, EccPssSignature},
+    rustcryptoecc::PssSecp256k1,
+    GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey,
+    GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature,
+    PssSigner,
+};
 
 use wasm_bindgen::prelude::*;
 
@@ -8,16 +13,18 @@ use crate::Algorithm;
 
 #[cfg(feature = "dh")]
 mod dh {
-    use pss_rs::group::{Uint, ResidueParams, ConcatMixed};
-    pub use pss_rs::group::{DhModp2048Modulus, GroupGroupManager, GroupGroupManagerPublicKey, GroupIcc, GroupPssSignature, DH_MODP_2048};
+    use pss_rs::dh::{ConcatMixed, ResidueParams, Uint};
+    pub use pss_rs::dh::{
+        DhModp2048Modulus, GroupGroupManager, GroupGroupManagerPublicKey, GroupIcc,
+        GroupPssSignature, DH_MODP_2048,
+    };
     pub const DH2048_LIMBS: usize = DhModp2048Modulus::LIMBS;
     pub const DH2048_WIDE_LIMBS: usize = <Uint<DH2048_LIMBS> as ConcatMixed>::MixedOutput::LIMBS;
-    pub type Dh2048GroupManager = GroupGroupManager<DH2048_LIMBS, DH2048_WIDE_LIMBS, DhModp2048Modulus>;
+    pub type Dh2048GroupManager =
+        GroupGroupManager<DH2048_LIMBS, DH2048_WIDE_LIMBS, DhModp2048Modulus>;
 }
 
-const SECP256K1_LIMBS: usize = <<Secp256k1 as Curve>::Uint as Integer>::LIMBS;
-const SECP256K1_WIDE_LIMBS: usize = <<Secp256k1 as Curve>::Uint as ConcatMixed>::MixedOutput::LIMBS;
-type Secp256k1GroupManager = EccGroupManager<SECP256K1_LIMBS, SECP256K1_WIDE_LIMBS, Secp256k1>;
+type Secp256k1GroupManager = EccGroupManager<PssSecp256k1>;
 
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Clone)]
@@ -26,7 +33,7 @@ pub struct JsPssSignature {
     pub s1: Uint8Array,
     pub s2: Uint8Array,
     pub pseudonym1: Option<Uint8Array>,
-    pub pseudonym2: Option<Uint8Array>
+    pub pseudonym2: Option<Uint8Array>,
 }
 
 impl From<GenericPssSignature> for JsPssSignature {
@@ -72,10 +79,16 @@ impl JsGroupManagerPrivateKey {
     pub fn generate(algorithm: Algorithm) -> Self {
         match algorithm {
             #[cfg(feature = "dh")]
-            Algorithm::DH2048 => JsGroupManagerPrivateKey::from_group_manager(dh::GroupGroupManager::new(Some(dh::DH_MODP_2048))),
+            Algorithm::DH2048 => JsGroupManagerPrivateKey::from_group_manager(
+                dh::GroupGroupManager::new(Some(dh::DH_MODP_2048)),
+            ),
             #[cfg(not(feature = "dh"))]
-            Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
-            Algorithm::Secp256k1 => JsGroupManagerPrivateKey::from_group_manager(Secp256k1GroupManager::new(None)),
+            Algorithm::DH2048 => {
+                panic!("Library compiled without support for DH")
+            }
+            Algorithm::Secp256k1 => {
+                JsGroupManagerPrivateKey::from_group_manager(Secp256k1GroupManager::new(None))
+            }
         }
     }
 
@@ -84,16 +97,21 @@ impl JsGroupManagerPrivateKey {
             #[cfg(feature = "dh")]
             Algorithm::DH2048 => {
                 let generic = self.clone().into();
-                let gm = dh::Dh2048GroupManager::from_generic_secret_key(generic, Some(dh::DH_MODP_2048.retrieve().to_be_bytes().into()));
+                let gm = dh::Dh2048GroupManager::from_generic_secret_key(
+                    generic,
+                    Some(dh::DH_MODP_2048.into()),
+                );
                 JsIccSecretKey::from_icc(gm.new_icc())
-            },
+            }
             #[cfg(not(feature = "dh"))]
-            Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
+            Algorithm::DH2048 => {
+                panic!("Library compiled without support for DH")
+            }
             Algorithm::Secp256k1 => {
                 let generic = self.clone().into();
                 let gm = Secp256k1GroupManager::from_generic_secret_key(generic, None);
                 JsIccSecretKey::from_icc(gm.new_icc())
-            },
+            }
         }
     }
 
@@ -102,16 +120,21 @@ impl JsGroupManagerPrivateKey {
             #[cfg(feature = "dh")]
             Algorithm::DH2048 => {
                 let generic = self.clone().into();
-                let mut gm = dh::Dh2048GroupManager::from_generic_secret_key(generic, Some(dh::DH_MODP_2048.retrieve().to_be_bytes().into()));
+                let mut gm = dh::Dh2048GroupManager::from_generic_secret_key(
+                    generic,
+                    Some(dh::DH_MODP_2048.into()),
+                );
                 JsPublicKey::from_public_key(gm.new_sector(deanonymizable))
-            },
+            }
             #[cfg(not(feature = "dh"))]
-            Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
+            Algorithm::DH2048 => {
+                panic!("Library compiled without support for DH")
+            }
             Algorithm::Secp256k1 => {
                 let generic = self.clone().into();
                 let mut gm = Secp256k1GroupManager::from_generic_secret_key(generic, None);
                 JsPublicKey::from_public_key(gm.new_sector(deanonymizable))
-            },
+            }
         }
     }
 
@@ -120,19 +143,23 @@ impl JsGroupManagerPrivateKey {
             #[cfg(feature = "dh")]
             Algorithm::DH2048 => {
                 let generic = self.clone().into();
-                let gm = dh::Dh2048GroupManager::from_generic_secret_key(generic, Some(dh::DH_MODP_2048.retrieve().to_be_bytes().into()));
+                let gm = dh::Dh2048GroupManager::from_generic_secret_key(
+                    generic,
+                    Some(dh::DH_MODP_2048.into()),
+                );
                 JsGroupManagerPublicKey::from_group_manager_public_key(gm.public_key().clone())
-            },
+            }
             #[cfg(not(feature = "dh"))]
-            Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
+            Algorithm::DH2048 => {
+                panic!("Library compiled without support for DH")
+            }
             Algorithm::Secp256k1 => {
                 let generic = self.clone().into();
                 let gm = Secp256k1GroupManager::from_generic_secret_key(generic, None);
                 JsGroupManagerPublicKey::from_group_manager_public_key(gm.public_key().clone())
-            },
+            }
         }
     }
-
 }
 
 impl From<GenericGroupManagerPrivateKey> for JsGroupManagerPrivateKey {
@@ -148,7 +175,7 @@ impl Into<GenericGroupManagerPrivateKey> for JsGroupManagerPrivateKey {
     fn into(self) -> GenericGroupManagerPrivateKey {
         GenericGroupManagerPrivateKey {
             sk_m: self.sk_m.to_vec().into_boxed_slice(),
-            sk_icc: self.sk_icc.to_vec().into_boxed_slice()
+            sk_icc: self.sk_icc.to_vec().into_boxed_slice(),
         }
     }
 }
@@ -163,28 +190,62 @@ impl JsGroupManagerPrivateKey {
 #[derive(Clone)]
 pub struct JsGroupManagerPublicKey {
     pub pk_m: Uint8Array,
-    pub pk_icc: Uint8Array
+    pub pk_icc: Uint8Array,
 }
 
 #[wasm_bindgen]
 impl JsGroupManagerPublicKey {
-    pub fn check_signature(&self, algorithm: Algorithm, sector: &JsPublicKey, signature: &JsPssSignature, message: &Uint8Array) -> bool {
+    pub fn check_signature(
+        &self,
+        algorithm: Algorithm,
+        sector: &JsPublicKey,
+        signature: &JsPssSignature,
+        message: &Uint8Array,
+    ) -> bool {
         match algorithm {
             #[cfg(feature = "dh")]
             Algorithm::DH2048 => {
-                let gpk = dh::GroupGroupManagerPublicKey::from_generic_gpk(self.clone().into(), Some(dh::DH_MODP_2048.retrieve().to_be_bytes().into()));
-                let sector = <dh::GroupIcc<{ dh::DH2048_LIMBS }, { dh::DH2048_WIDE_LIMBS }, dh::DhModp2048Modulus> as Icc>::PublicKey::try_from(<JsPublicKey as Into<GenericPublicKey>>::into(sector.clone())).unwrap();
-                let signature = dh::GroupPssSignature::try_from(<JsPssSignature as Into<GenericPssSignature>>::into(signature.clone())).unwrap();
+                let gpk = dh::GroupGroupManagerPublicKey::from_generic_gpk(
+                    self.clone().into(),
+                    Some(dh::DH_MODP_2048.into()),
+                );
+                let sector = <dh::GroupIcc<
+                    { dh::DH2048_LIMBS },
+                    { dh::DH2048_WIDE_LIMBS },
+                    dh::DhModp2048Modulus,
+                > as Icc>::PublicKey::try_from(
+                    <JsPublicKey as Into<Box<[u8]>>>::into(sector.clone()),
+                )
+                .unwrap();
+                let signature =
+                    dh::GroupPssSignature::try_from(<JsPssSignature as Into<
+                        GenericPssSignature,
+                    >>::into(signature.clone()))
+                    .unwrap();
                 gpk.check_signature(&message.to_vec(), &sector, &signature)
-            },
+            }
             #[cfg(not(feature = "dh"))]
-            Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
+            Algorithm::DH2048 => {
+                panic!("Library compiled without support for DH")
+            }
             Algorithm::Secp256k1 => {
                 let gpk = EccGroupManagerPublicKey::from_generic_gpk(self.clone().into(), None);
-                let sector = <EccIcc<Secp256k1> as Icc>::PublicKey::try_from(<JsPublicKey as Into<GenericPublicKey>>::into(sector.clone())).unwrap();
-                let signature = EccPssSignature::<Secp256k1>::try_from(<JsPssSignature as Into<GenericPssSignature>>::into(signature.clone())).unwrap();
+                let sector =
+                    <EccIcc<PssSecp256k1> as Icc>::PublicKey::try_from(<JsPublicKey as Into<
+                        Box<[u8]>,
+                    >>::into(
+                        sector.clone()
+                    ))
+                    .unwrap();
+                let signature =
+                    EccPssSignature::<PssSecp256k1>::try_from(<JsPssSignature as Into<
+                        GenericPssSignature,
+                    >>::into(
+                        signature.clone()
+                    ))
+                    .unwrap();
                 gpk.check_signature(&message.to_vec(), &sector, &signature)
-            },
+            }
         }
     }
 }
@@ -193,7 +254,7 @@ impl From<GenericGroupManagerPublicKey> for JsGroupManagerPublicKey {
     fn from(value: GenericGroupManagerPublicKey) -> Self {
         Self {
             pk_m: value.pk_m.as_ref().into(),
-            pk_icc: value.pk_icc.as_ref().into()
+            pk_icc: value.pk_icc.as_ref().into(),
         }
     }
 }
@@ -202,7 +263,7 @@ impl Into<GenericGroupManagerPublicKey> for JsGroupManagerPublicKey {
     fn into(self) -> GenericGroupManagerPublicKey {
         GenericGroupManagerPublicKey {
             pk_m: self.pk_m.to_vec().into_boxed_slice(),
-            pk_icc: self.pk_icc.to_vec().into_boxed_slice()
+            pk_icc: self.pk_icc.to_vec().into_boxed_slice(),
         }
     }
 }
@@ -217,32 +278,61 @@ impl JsGroupManagerPublicKey {
 #[derive(Clone)]
 pub struct JsIccSecretKey {
     pub sk_icc_1_u: Uint8Array,
-    pub sk_icc_2_u: Uint8Array
+    pub sk_icc_2_u: Uint8Array,
 }
 
 #[wasm_bindgen]
 impl JsIccSecretKey {
-    pub fn sign(&self, algorithm: Algorithm, gpk: &JsGroupManagerPublicKey, sector: &JsPublicKey, use_identifier1: bool, use_identifier2: bool, message: &Uint8Array) -> JsPssSignature {
+    pub fn sign(
+        &self,
+        algorithm: Algorithm,
+        gpk: &JsGroupManagerPublicKey,
+        sector: &JsPublicKey,
+        use_identifier1: bool,
+        use_identifier2: bool,
+        message: &Uint8Array,
+    ) -> JsPssSignature {
         match algorithm {
             #[cfg(feature = "dh")]
             Algorithm::DH2048 => {
-                let gpk = dh::GroupGroupManagerPublicKey::from_generic_gpk(gpk.clone().into(), Some(dh::DH_MODP_2048.retrieve().to_be_bytes().into()));
-                let sector = <dh::GroupIcc<{ dh::DH2048_LIMBS }, { dh::DH2048_WIDE_LIMBS }, dh::DhModp2048Modulus> as Icc>::PublicKey::try_from(<JsPublicKey as Into<GenericPublicKey>>::into(sector.clone())).unwrap();
+                let gpk = dh::GroupGroupManagerPublicKey::from_generic_gpk(
+                    gpk.clone().into(),
+                    Some(dh::DH_MODP_2048.into()),
+                );
+                let sector = <dh::GroupIcc<
+                    { dh::DH2048_LIMBS },
+                    { dh::DH2048_WIDE_LIMBS },
+                    dh::DhModp2048Modulus,
+                > as Icc>::PublicKey::try_from(
+                    <JsPublicKey as Into<Box<[u8]>>>::into(sector.clone()),
+                )
+                .unwrap();
                 let icc = dh::GroupIcc::from_generic_secret_key(self.clone().into(), gpk);
                 let signer = icc.signer(&sector, use_identifier1, use_identifier2);
                 let sig = signer.sign(&message.to_vec());
                 JsPssSignature::from_pss_signature(sig)
-            },
+            }
             #[cfg(not(feature = "dh"))]
-            Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
+            Algorithm::DH2048 => {
+                panic!("Library compiled without support for DH")
+            }
             Algorithm::Secp256k1 => {
-                let gpk = EccGroupManagerPublicKey::from_generic_gpk(gpk.clone().into(), None);
-                let sector = <EccIcc<Secp256k1> as Icc>::PublicKey::try_from(<JsPublicKey as Into<GenericPublicKey>>::into(sector.clone())).unwrap();
+                let gpk = EccGroupManagerPublicKey::<PssSecp256k1>::from_generic_gpk(
+                    gpk.clone().into(),
+                    None,
+                );
+                let sector =
+                    <EccIcc<PssSecp256k1> as Icc>::PublicKey::try_from(<JsPublicKey as Into<
+                        Box<[u8]>,
+                    >>::into(
+                        sector.clone()
+                    ))
+                    .unwrap();
                 let icc = EccIcc::from_generic_secret_key(self.clone().into(), gpk);
                 let signer = icc.signer(&sector, use_identifier1, use_identifier2);
                 let sig = signer.sign(&message.to_vec());
                 JsPssSignature::from_pss_signature(sig)
-            },
+            }
         }
     }
 }
@@ -251,7 +341,7 @@ impl From<GenericIccSecretKey> for JsIccSecretKey {
     fn from(value: GenericIccSecretKey) -> Self {
         Self {
             sk_icc_1_u: value.sk_icc_1_u.as_ref().into(),
-            sk_icc_2_u: value.sk_icc_2_u.as_ref().into()
+            sk_icc_2_u: value.sk_icc_2_u.as_ref().into(),
         }
     }
 }
@@ -260,7 +350,7 @@ impl Into<GenericIccSecretKey> for JsIccSecretKey {
     fn into(self) -> GenericIccSecretKey {
         GenericIccSecretKey {
             sk_icc_1_u: self.sk_icc_1_u.to_vec().into_boxed_slice(),
-            sk_icc_2_u: self.sk_icc_2_u.to_vec().into_boxed_slice()
+            sk_icc_2_u: self.sk_icc_2_u.to_vec().into_boxed_slice(),
         }
     }
 }
@@ -275,20 +365,20 @@ impl JsIccSecretKey {
 #[derive(Clone)]
 pub struct JsPublicKey(pub Uint8Array);
 
-impl From<GenericPublicKey> for JsPublicKey {
-    fn from(value: GenericPublicKey) -> Self {
-        Self(value.0.as_ref().into())
+impl From<Box<[u8]>> for JsPublicKey {
+    fn from(value: Box<[u8]>) -> Self {
+        Self(value.as_ref().into())
     }
 }
 
-impl Into<GenericPublicKey> for JsPublicKey {
-    fn into(self) -> GenericPublicKey {
-        GenericPublicKey(self.0.to_vec().into_boxed_slice())
+impl Into<Box<[u8]>> for JsPublicKey {
+    fn into(self) -> Box<[u8]> {
+        self.0.to_vec().into_boxed_slice()
     }
 }
 
 impl JsPublicKey {
-    pub fn from_public_key<T: Into<GenericPublicKey>>(pk: T) -> Self {
+    pub fn from_public_key<T: Into<Box<[u8]>>>(pk: T) -> Self {
         JsPublicKey::from(pk.into())
     }
 }

@@ -1,5 +1,9 @@
-use k256::Secp256k1;
-use pss_rs::{rustcryptoecc::{EccGroupManager, EccIcc}, GroupManager, Icc, PssSigner};
+
+use pss_rs::{
+    ecc::{EccGroupManager, EccIcc},
+    rustcryptoecc::PssSecp256k1,
+    GroupManager, Icc, PssSigner,
+};
 
 #[allow(long_running_const_eval)]
 use wasm_bindgen::prelude::*;
@@ -9,13 +13,13 @@ use types::*;
 
 #[cfg(feature = "dh")]
 mod dh {
-    pub use pss_rs::group::{GroupGroupManager, DH_MODP_2048};
+    pub use pss_rs::dh::{GroupGroupManager, DH_MODP_2048};
 }
 
 #[wasm_bindgen]
 pub enum Algorithm {
     Secp256k1,
-    DH2048
+    DH2048,
 }
 
 #[wasm_bindgen(getter_with_clone)]
@@ -24,7 +28,7 @@ pub struct TSystem {
     pub gprv: JsGroupManagerPrivateKey,
     pub iccprv: JsIccSecretKey,
     pub sig: JsPssSignature,
-    pub sector: JsPublicKey
+    pub sector: JsPublicKey,
 }
 
 // TODO need generic sector key
@@ -39,29 +43,35 @@ pub fn sig_new_ident(alg: Algorithm, msg: &[u8]) -> TSystem {
             let signer = icc.signer(&sector, true, true);
             let signature = signer.sign(msg);
             TSystem {
-                gpub: JsGroupManagerPublicKey::from_group_manager_public_key(gm.public_key().clone()),
+                gpub: JsGroupManagerPublicKey::from_group_manager_public_key(
+                    gm.public_key().clone(),
+                ),
                 gprv: JsGroupManagerPrivateKey::from_group_manager(gm),
                 iccprv: JsIccSecretKey::from_icc(icc),
                 sig: JsPssSignature::from_pss_signature(signature),
-                sector: JsPublicKey::from_public_key(sector)
+                sector: JsPublicKey::from_public_key(sector),
             }
-        },
+        }
         #[cfg(not(feature = "dh"))]
-        Algorithm::DH2048 => { panic!("Library compiled without support for DH") },
+        Algorithm::DH2048 => {
+            panic!("Library compiled without support for DH")
+        }
         Algorithm::Secp256k1 => {
             let mut gm = EccGroupManager::new(None);
-            let icc: EccIcc<Secp256k1> = gm.new_icc();
+            let icc: EccIcc<PssSecp256k1> = gm.new_icc();
             let sector = gm.new_sector(false);
             let signer = icc.signer(&sector, true, true);
             let signature = signer.sign(msg);
             TSystem {
-                gpub: JsGroupManagerPublicKey::from_group_manager_public_key(gm.public_key().clone()),
+                gpub: JsGroupManagerPublicKey::from_group_manager_public_key(
+                    gm.public_key().clone(),
+                ),
                 gprv: JsGroupManagerPrivateKey::from_group_manager(gm),
                 iccprv: JsIccSecretKey::from_icc(icc),
                 sig: JsPssSignature::from_pss_signature(signature),
-                sector: JsPublicKey::from_public_key(sector)
+                sector: JsPublicKey::from_public_key(sector),
             }
-        },
+        }
     }
 }
 
