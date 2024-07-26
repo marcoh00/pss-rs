@@ -1,23 +1,7 @@
-use crypto_bigint::{ConcatMixed, NonZero, Uint};
-
 #[cfg(feature = "dh")]
 pub mod dh;
 pub mod ecc;
 pub mod rustcryptoecc;
-
-fn mul_mod<const LIMBS: usize, const WIDE_LIMBS: usize>(
-    a: &Uint<LIMBS>,
-    b: &Uint<LIMBS>,
-    p: &Uint<LIMBS>,
-) -> Uint<LIMBS>
-where
-    Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>,
-{
-    let mul = a.mul(&b);
-    let wide_modulus = Uint::<LIMBS>::from_u8(0).concat_mixed(p);
-    let residue = mul.rem(&NonZero::from_uint(wide_modulus));
-    residue.resize()
-}
 
 pub trait GroupManager: Into<GenericGroupManagerPrivateKey> {
     type SecretKey;

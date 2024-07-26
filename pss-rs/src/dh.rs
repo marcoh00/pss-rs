@@ -10,7 +10,7 @@ use crypto_bigint::{
 use sha3::{digest::OutputSizeUser, Digest};
 
 use crate::{
-    mul_mod, GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey,
+    GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey,
     GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature,
     PssSigner,
 };
@@ -90,6 +90,20 @@ where
 }
 
 type PkSector<const LIMBS: usize, MOD> = PssDhPublicKey<MOD, LIMBS>;
+
+fn mul_mod<const LIMBS: usize, const WIDE_LIMBS: usize>(
+    a: &Uint<LIMBS>,
+    b: &Uint<LIMBS>,
+    p: &Uint<LIMBS>,
+) -> Uint<LIMBS>
+where
+    Uint<LIMBS>: ConcatMixed<MixedOutput = Uint<WIDE_LIMBS>>,
+{
+    let mul = a.mul(&b);
+    let wide_modulus = Uint::<LIMBS>::from_u8(0).concat_mixed(p);
+    let residue = mul.rem(&NonZero::from_uint(wide_modulus));
+    residue.resize()
+}
 
 fn signature_hash<const LIMBS: usize, MOD: ResidueParams<LIMBS>, T: AsRef<[u8]>>(
     q: &PssDhPublicKey<MOD, LIMBS>,
