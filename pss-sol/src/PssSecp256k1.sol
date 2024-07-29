@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8;
 
 import "elliptic-curve-solidity/contracts/EllipticCurve.sol";
-import "elliptic-curve-solidity/examples/Secp256k1.sol";
+import "./IPssVerifier.sol";
 
-contract PssSecp256k1 {
+contract PssSecp256k1 is IPssVerifier {
     uint256 public constant GX =
         0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798;
     uint256 public constant GY =
@@ -49,7 +49,7 @@ contract PssSecp256k1 {
 
     }
 
-    function validate_signature(bytes calldata message, uint256 c, uint256 s1, uint256 s2) public view returns (bool) {
+    function validate_signature(bytes calldata message, uint256 c, uint256 s1, uint256 s2) public view override returns (bool) {
         return uint256(keccak256(recover_hash_input(message, c, s1, s2))) % PP == c;
     }
 
@@ -68,7 +68,7 @@ contract PssSecp256k1 {
         );
     }
 
-    function validate_signature_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x) public view returns (bool) {
+    function validate_signature_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x) public view override returns (bool) {
         return uint256(keccak256(recover_hash_input_p1(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x))) % PP == c;
     }
 
@@ -95,7 +95,7 @@ contract PssSecp256k1 {
         );
     }
 
-    function validate_signature_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bool) {
+    function validate_signature_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view override returns (bool) {
         return uint256(keccak256(recover_hash_input_p1_p2(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x, i_sector_icc_2_parity, i_sector_icc_2_x))) % PP == c;
     }
 
@@ -130,7 +130,7 @@ contract PssSecp256k1 {
         );
     }
 
-    function validate_signature_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bool) {
+    function validate_signature_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view override returns (bool) {
         return uint256(keccak256(recover_hash_input_p2(message, c, s1, s2, i_sector_icc_2_parity, i_sector_icc_2_x))) % PP == c;
     }
 
