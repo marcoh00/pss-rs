@@ -487,10 +487,7 @@ impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
 mod tests {
     use rand_core::OsRng;
     use crate::{
-        ecc::{EccIcc, EccPssSignature, PssCompatibleEccCurve, Scalar},
-        rustcryptoecc::PssSecp256k1,
-        GenericGroupManagerPublicKey, GenericPssSignature, GroupManager,
-        GroupManagerPublicKey, Icc, PssSigner,
+        ecc::{EccIcc, EccPssSignature, PssCompatibleEccCurve, Scalar}, rustcryptoecc::PssSecp256k1, GenericGroupManagerPublicKey, GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner
     };
     use super::{EccGroupManager, EccGroupManagerPublicKey};
 
@@ -516,9 +513,25 @@ mod tests {
         for (id1, id2) in combinations {
             let signer = icc.signer(&sector, id1, id2);
             let signature = signer.sign(SIGN_MESSAGE);
+            let signature2 = signer.sign(SIGN_MESSAGE);
+            
             assert!(group_manager
                 .public_key()
                 .check_signature(SIGN_MESSAGE, &sector, &signature));
+            assert!(group_manager
+                .public_key()
+                .check_signature(SIGN_MESSAGE, &sector, &signature2));
+            
+            assert!(signature.c != signature2.c);
+            assert!(signature.s1 != signature2.s1);
+            assert!(signature.s2 != signature2.s2);
+
+            if id1 {
+                assert!(signature.pseudonym1().as_ref().unwrap() == signature2.pseudonym1().as_ref().unwrap());
+            }
+            if id2 {
+                assert!(signature.pseudonym2().as_ref().unwrap() == signature2.pseudonym2().as_ref().unwrap());
+            }
         }
     }
 
