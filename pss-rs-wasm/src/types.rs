@@ -3,8 +3,7 @@ use pss_rs::{
     ecc::{EccGroupManager, EccGroupManagerPublicKey, EccIcc, EccPssSignature},
     rustcryptoecc::PssSecp256k1,
     GenericGroupManagerPrivateKey, GenericGroupManagerPublicKey, GenericIccSecretKey,
-    GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature,
-    PssSigner,
+    GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner,
 };
 
 use wasm_bindgen::prelude::*;
@@ -289,7 +288,10 @@ pub struct JsIccSecretKey {
 impl JsIccSecretKey {
     #[wasm_bindgen(constructor)]
     pub fn new(sk_icc_1_u: Uint8Array, sk_icc_2_u: Uint8Array) -> Self {
-        Self { sk_icc_1_u, sk_icc_2_u }
+        Self {
+            sk_icc_1_u,
+            sk_icc_2_u,
+        }
     }
 
     pub fn sign(
@@ -372,17 +374,21 @@ impl JsIccSecretKey {
 
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Clone)]
-pub struct JsPublicKey(pub Uint8Array);
+pub struct JsPublicKey {
+    pub pk: Uint8Array,
+}
 
 impl From<Box<[u8]>> for JsPublicKey {
     fn from(value: Box<[u8]>) -> Self {
-        Self(value.as_ref().into())
+        Self {
+            pk: value.as_ref().into(),
+        }
     }
 }
 
 impl Into<Box<[u8]>> for JsPublicKey {
     fn into(self) -> Box<[u8]> {
-        self.0.to_vec().into_boxed_slice()
+        self.pk.to_vec().into_boxed_slice()
     }
 }
 
