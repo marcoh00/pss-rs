@@ -25,6 +25,11 @@ mod dh {
 
 type Secp256k1GroupManager = EccGroupManager<PssSecp256k1>;
 
+#[wasm_bindgen]
+pub fn init_panic_hook() {
+    console_error_panic_hook::set_once();
+}
+
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Clone)]
 pub struct JsPssSignature {
