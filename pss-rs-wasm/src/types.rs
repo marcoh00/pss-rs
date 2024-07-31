@@ -383,6 +383,16 @@ pub struct JsPublicKey {
     pub pk: Uint8Array,
 }
 
+#[wasm_bindgen]
+impl JsPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(pk: Uint8Array) -> Self {
+        Self {
+            pk
+        }
+    }
+}
+
 impl From<Box<[u8]>> for JsPublicKey {
     fn from(value: Box<[u8]>) -> Self {
         Self {
