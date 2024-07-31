@@ -198,6 +198,11 @@ pub struct JsGroupManagerPublicKey {
 
 #[wasm_bindgen]
 impl JsGroupManagerPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(pk_m: Uint8Array, pk_icc: Uint8Array) -> Self {
+        Self { pk_m, pk_icc }
+    }
+
     pub fn check_signature(
         &self,
         algorithm: Algorithm,
