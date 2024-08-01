@@ -76,7 +76,10 @@ fn main() {
         .expect("specified output file on command line");
     let outfile = match matches.get_one::<bool>("force").unwrap() {
         true => File::create(outpath).expect("path must be writable"),
-        false => File::create_new(outpath).expect("path must be writable and file must not exist"),
+        false => {
+            assert!(!outpath.exists(), "file must not exist");
+            File::create(outpath).expect("path must be writable")
+        },
     };
 
     let key = generate_keys(algorithm, sectors);
