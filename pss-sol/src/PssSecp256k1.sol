@@ -33,6 +33,14 @@ contract PssSecp256k1 is IPssVerifier {
         pk_sector_y = _pk_sector_y;
     }
 
+    function get_gpk() public view returns (uint256, uint256, uint256, uint256) {
+        return (gpk.pk_m_x, gpk.pk_m_y, gpk.pk_icc_x, gpk.pk_icc_y);
+    }
+
+    function get_sector() public view returns (uint256, uint256) {
+        return (pk_sector_x, pk_sector_y);
+    }
+
     function calc_q1(uint256 c, uint256 s1, uint256 s2) private view returns (uint256, uint256) {
         (uint256 q1s1_x, uint256 q1s1_y) = EllipticCurve.ecMul(c, gpk.pk_icc_x, gpk.pk_icc_y, AA, PP);
         (uint256 q1s2_x, uint256 q1s2_y) = EllipticCurve.ecMul(s1, GX, GY, AA, PP);
