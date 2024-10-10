@@ -17,6 +17,7 @@ mod dh {
 
 #[wasm_bindgen]
 pub enum Algorithm {
+    AltBn128,
     Secp256k1,
     DH2048,
 }
@@ -53,6 +54,12 @@ pub fn sig_new_ident(alg: Algorithm, msg: &[u8]) -> TSystem {
         }
         #[cfg(not(feature = "dh"))]
         Algorithm::DH2048 => {
+            panic!("Library compiled without support for DH")
+        }
+        #[cfg(feature = "altbn")]
+        Algorithm::AltBn128 => todo!(),
+        #[cfg(not(feature = "altbn"))]
+        Algorithm::AltBn128 => {
             panic!("Library compiled without support for DH")
         }
         Algorithm::Secp256k1 => {

@@ -1,3 +1,5 @@
+#[cfg(feature = "altbn")]
+pub mod altbn;
 #[cfg(feature = "dh")]
 pub mod dh;
 pub mod ecc;

@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 dh = ["pss-rs/dh"]
+altbn = ["pss-rs/altbn"]
 
 [dependencies]
 pss-rs = { path = "../pss-rs" }

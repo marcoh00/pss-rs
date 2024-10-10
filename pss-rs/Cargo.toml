@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+default = ["wasm", "altbn"]
 wasm = ["wasm-bindgen", "getrandom"]
 dh = []
+altbn = ["substrate-bn"]
 
 [dependencies]
 rand_core = "0.6"
@@ -18,3 +20,4 @@ sha3 = "0.10"
 # Optional features
 getrandom = { version = "0.2", features = ["js"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
+substrate-bn = { version = "0.6", optional = true }

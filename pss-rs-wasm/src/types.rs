@@ -6,9 +6,10 @@ use pss_rs::{
     GenericPssSignature, GroupManager, GroupManagerPublicKey, Icc, PssSignature, PssSigner,
 };
 
-use wasm_bindgen::prelude::*;
-
 use crate::Algorithm;
+use pss_rs::altbn::PssAltBn128;
+use pss_rs::ecc::PssCompatibleEccCurve;
+use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "dh")]
 mod dh {
@@ -94,6 +95,16 @@ impl JsGroupManagerPrivateKey {
             Algorithm::DH2048 => {
                 panic!("Library compiled without support for DH")
             }
+            #[cfg(feature = "altbn")]
+            Algorithm::AltBn128 => {
+                JsGroupManagerPrivateKey::from_group_manager(EccGroupManager::<PssAltBn128>::new(
+                    None,
+                ))
+            }
+            #[cfg(not(feature = "altbn"))]
+            Algorithm::AltBn128 => {
+                panic!("Library compiled without support for alt_bn128")
+            }
             Algorithm::Secp256k1 => {
                 JsGroupManagerPrivateKey::from_group_manager(Secp256k1GroupManager::new(None))
             }
@@ -115,11 +126,13 @@ impl JsGroupManagerPrivateKey {
             Algorithm::DH2048 => {
                 panic!("Library compiled without support for DH")
             }
-            Algorithm::Secp256k1 => {
-                let generic = self.clone().into();
-                let gm = Secp256k1GroupManager::from_generic_secret_key(generic, None);
-                JsIccSecretKey::from_icc(gm.new_icc())
+            #[cfg(feature = "altbn")]
+            Algorithm::AltBn128 => self.new_icc_ecc::<PssAltBn128>(),
+            #[cfg(not(feature = "altbn"))]
+            Algorithm::AltBn128 => {
+                panic!("Library compiled without support for alt_bn128")
             }
+            Algorithm::Secp256k1 => self.new_icc_ecc::<PssSecp256k1>(),
         }
     }
 
@@ -138,11 +151,13 @@ impl JsGroupManagerPrivateKey {
             Algorithm::DH2048 => {
                 panic!("Library compiled without support for DH")
             }
-            Algorithm::Secp256k1 => {
-                let generic = self.clone().into();
-                let mut gm = Secp256k1GroupManager::from_generic_secret_key(generic, None);
-                JsPublicKey::from_public_key(gm.new_sector(deanonymizable))
+            #[cfg(feature = "altbn")]
+            Algorithm::AltBn128 => self.new_sector_ecc::<PssAltBn128>(deanonymizable),
+            #[cfg(not(feature = "altbn"))]
+            Algorithm::AltBn128 => {
+                panic!("Library compiled without support for alt_bn128")
             }
+            Algorithm::Secp256k1 => self.new_sector_ecc::<PssSecp256k1>(deanonymizable),
         }
     }
 
@@ -161,12 +176,34 @@ impl JsGroupManagerPrivateKey {
             Algorithm::DH2048 => {
                 panic!("Library compiled without support for DH")
             }
-            Algorithm::Secp256k1 => {
-                let generic = self.clone().into();
-                let gm = Secp256k1GroupManager::from_generic_secret_key(generic, None);
-                JsGroupManagerPublicKey::from_group_manager_public_key(gm.public_key().clone())
+            #[cfg(feature = "altbn")]
+            Algorithm::AltBn128 => self.public_key_ecc::<PssAltBn128>(),
+            #[cfg(not(feature = "altbn"))]
+            Algorithm::AltBn128 => {
+                panic!("Library compiled without support for alt_bn128")
             }
+            Algorithm::Secp256k1 => self.public_key_ecc::<PssSecp256k1>(),
         }
+    }
+}
+
+impl JsGroupManagerPrivateKey {
+    fn new_icc_ecc<C: PssCompatibleEccCurve>(&self) -> JsIccSecretKey {
+        let generic = self.clone().into();
+        let gm = EccGroupManager::<C>::from_generic_secret_key(generic, None);
+        JsIccSecretKey::from_icc(gm.new_icc())
+    }
+
+    fn new_sector_ecc<C: PssCompatibleEccCurve>(&self, deanonymizable: bool) -> JsPublicKey {
+        let generic = self.clone().into();
+        let mut gm = EccGroupManager::<C>::from_generic_secret_key(generic, None);
+        JsPublicKey::from_public_key(gm.new_sector(deanonymizable))
+    }
+
+    fn public_key_ecc<C: PssCompatibleEccCurve>(&self) -> JsGroupManagerPublicKey {
+        let generic = self.clone().into();
+        let gm = EccGroupManager::<C>::from_generic_secret_key(generic, None);
+        JsGroupManagerPublicKey::from_group_manager_public_key(gm.public_key().clone())
     }
 }
 
@@ -241,25 +278,38 @@ impl JsGroupManagerPublicKey {
             Algorithm::DH2048 => {
                 panic!("Library compiled without support for DH")
             }
+            #[cfg(feature = "altbn")]
+            Algorithm::AltBn128 => {
+                self.check_signature_ecc::<PssAltBn128>(sector, signature, message)
+            }
+            #[cfg(not(feature = "altbn"))]
+            Algorithm::AltBn128 => {
+                panic!("Library compiled without support for alt_bn128")
+            }
             Algorithm::Secp256k1 => {
-                let gpk = EccGroupManagerPublicKey::from_generic_gpk(self.clone().into(), None);
-                let sector =
-                    <EccIcc<PssSecp256k1> as Icc>::PublicKey::try_from(<JsPublicKey as Into<
-                        Box<[u8]>,
-                    >>::into(
-                        sector.clone()
-                    ))
-                    .unwrap();
-                let signature =
-                    EccPssSignature::<PssSecp256k1>::try_from(<JsPssSignature as Into<
-                        GenericPssSignature,
-                    >>::into(
-                        signature.clone()
-                    ))
-                    .unwrap();
-                gpk.check_signature(&message.to_vec(), &sector, &signature)
+                self.check_signature_ecc::<PssSecp256k1>(sector, signature, message)
             }
         }
+    }
+}
+
+impl JsGroupManagerPublicKey {
+    pub fn check_signature_ecc<C: PssCompatibleEccCurve>(
+        &self,
+        sector: &JsPublicKey,
+        signature: &JsPssSignature,
+        message: &Uint8Array,
+    ) -> bool {
+        let gpk = EccGroupManagerPublicKey::from_generic_gpk(self.clone().into(), None);
+        let sector = <EccIcc<C> as Icc>::PublicKey::try_from(
+            <JsPublicKey as Into<Box<[u8]>>>::into(sector.clone()),
+        )
+        .unwrap();
+        let signature = EccPssSignature::<C>::try_from(<JsPssSignature as Into<
+            GenericPssSignature,
+        >>::into(signature.clone()))
+        .unwrap();
+        gpk.check_signature(&message.to_vec(), &sector, &signature)
     }
 }
 
@@ -337,24 +387,47 @@ impl JsIccSecretKey {
             Algorithm::DH2048 => {
                 panic!("Library compiled without support for DH")
             }
-            Algorithm::Secp256k1 => {
-                let gpk = EccGroupManagerPublicKey::<PssSecp256k1>::from_generic_gpk(
-                    gpk.clone().into(),
-                    None,
-                );
-                let sector =
-                    <EccIcc<PssSecp256k1> as Icc>::PublicKey::try_from(<JsPublicKey as Into<
-                        Box<[u8]>,
-                    >>::into(
-                        sector.clone()
-                    ))
-                    .unwrap();
-                let icc = EccIcc::from_generic_secret_key(self.clone().into(), gpk);
-                let signer = icc.signer(&sector, use_identifier1, use_identifier2);
-                let sig = signer.sign(&message.to_vec());
-                JsPssSignature::from_pss_signature(sig)
+            #[cfg(feature = "altbn")]
+            Algorithm::AltBn128 => self.sign_ecc::<PssAltBn128>(
+                gpk,
+                sector,
+                use_identifier1,
+                use_identifier2,
+                message,
+            ),
+            #[cfg(not(feature = "altbn"))]
+            Algorithm::AltBn128 => {
+                panic!("Library compiled without support for alt_bn128")
             }
+            Algorithm::Secp256k1 => self.sign_ecc::<PssSecp256k1>(
+                gpk,
+                sector,
+                use_identifier1,
+                use_identifier2,
+                message,
+            ),
         }
+    }
+}
+
+impl JsIccSecretKey {
+    fn sign_ecc<C: PssCompatibleEccCurve>(
+        &self,
+        gpk: &JsGroupManagerPublicKey,
+        sector: &crate::types::JsPublicKey,
+        use_identifier1: bool,
+        use_identifier2: bool,
+        message: &Uint8Array,
+    ) -> JsPssSignature {
+        let gpk = EccGroupManagerPublicKey::<C>::from_generic_gpk(gpk.clone().into(), None);
+        let sector = <EccIcc<C> as Icc>::PublicKey::try_from(
+            <JsPublicKey as Into<Box<[u8]>>>::into(sector.clone()),
+        )
+        .unwrap();
+        let icc = EccIcc::from_generic_secret_key(self.clone().into(), gpk);
+        let signer = icc.signer(&sector, use_identifier1, use_identifier2);
+        let sig = signer.sign(&message.to_vec());
+        JsPssSignature::from_pss_signature(sig)
     }
 }
 
@@ -392,9 +465,7 @@ pub struct JsPublicKey {
 impl JsPublicKey {
     #[wasm_bindgen(constructor)]
     pub fn new(pk: Uint8Array) -> Self {
-        Self {
-            pk
-        }
+        Self { pk }
     }
 }
 

@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["console_error_panic_hook"]
 dh = ["pss-rs/dh"]
+altbn = ["pss-rs/altbn"]
 
 [dependencies]
 pss-rs = { path = "../pss-rs", features = ["wasm"] }

@@ -8,9 +8,14 @@ use pss_rs::{
 };
 use serde::Serialize;
 
+#[cfg(feature = "altbn")]
+use pss_rs::altbn::PssAltBn128;
+
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Algorithm {
     Secp256k1,
+    #[cfg(feature = "altbn")]
+    AltBn128,
     #[cfg(feature = "dh")]
     DH2048,
 }
@@ -79,7 +84,7 @@ fn main() {
         false => {
             assert!(!outpath.exists(), "file must not exist");
             File::create(outpath).expect("path must be writable")
-        },
+        }
     };
 
     let key = generate_keys(algorithm, sectors);
@@ -89,6 +94,12 @@ fn main() {
 fn generate_keys(algorithm: &Algorithm, sectors: &u16) -> Key {
     match algorithm {
         Algorithm::Secp256k1 => generate_keys_ecc::<PssSecp256k1>(algorithm, *sectors),
+        #[cfg(feature = "altbn")]
+        Algorithm::AltBn128 => generate_keys_ecc::<PssAltBn128>(algorithm, *sectors),
+        #[cfg(feature = "dh")]
+        Algorithm::DH2048 => {
+            todo!()
+        }
     }
 }
 
