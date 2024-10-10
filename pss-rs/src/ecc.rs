@@ -10,7 +10,6 @@ use rand_core::CryptoRngCore;
 use sha3::Digest;
 use std::marker::PhantomData;
 
-const ID_DSI: &[u8] = b"ECC-KECCAK256";
 pub trait Scalar<C> {
     type Point: Point<C>;
 
@@ -32,6 +31,7 @@ pub trait Point<C> {
 }
 
 pub trait PssCompatibleEccCurve: Clone {
+    const ID_DSI: &'static [u8];
     type Curve;
     type Scalar: Scalar<Self::Curve, Point = Self::Point>
         + Clone
@@ -71,7 +71,7 @@ fn signature_hash<C: PssCompatibleEccCurve, D: Digest>(
         c_message_buffer.extend_from_slice(&Into::<Box<[u8]>>::into(a2));
     }
     c_message_buffer.extend_from_slice(&Into::<Box<[u8]>>::into(pk_sector.clone()));
-    c_message_buffer.extend_from_slice(ID_DSI);
+    c_message_buffer.extend_from_slice(C::ID_DSI);
     c_message_buffer.extend_from_slice(message);
 
     D::digest(&c_message_buffer)

@@ -142,6 +142,7 @@ where
 pub struct PssSecp256k1;
 
 impl PssCompatibleEccCurve for PssSecp256k1 {
+    const ID_DSI: &'static [u8] = b"ECC-SECP256K1";
     type Curve = Secp256k1;
     type Scalar = RustCryptoScalar<Secp256k1>;
     type Point = RustCryptoPoint<Secp256k1>;
@@ -168,6 +169,7 @@ mod tests {
         crate::ecc::tests::invalid_signature::<PssSecp256k1>()
     }
 
+    // TODO Fix values with changed ID_DSI
     #[test]
     fn sol_test_values() {
         let gpk = EccGroupManagerPublicKey::<PssSecp256k1>::from_generic_gpk(

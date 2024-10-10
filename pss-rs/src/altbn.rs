@@ -110,6 +110,7 @@ pub struct BnCurve;
 pub struct PssAltBn128;
 
 impl PssCompatibleEccCurve for PssAltBn128 {
+    const ID_DSI: &'static [u8] = b"ECC-ALTBN128-G1";
     type Curve = BnCurve;
     type Scalar = BnScalar;
     type Point = BnPoint;
@@ -118,6 +119,7 @@ impl PssCompatibleEccCurve for PssAltBn128 {
 #[cfg(test)]
 mod tests {
     use crate::altbn::PssAltBn128;
+    use crate::ecc::{Point, PssCompatibleEccCurve};
     use substrate_bn::Fq;
 
     #[test]
@@ -133,6 +135,16 @@ mod tests {
         let mut be = [0u8; 32];
         myno.to_big_endian(&mut be).unwrap();
         assert_eq!(ethereum_mod, be);
+
+        let base = <PssAltBn128 as PssCompatibleEccCurve>::Point::base();
+        let serialized: Box<[u8]> = base.into();
+
+        let expected: &[u8] = &[
+            4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 2,
+        ];
+        assert_eq!(serialized.as_ref(), expected);
     }
 
     #[test]

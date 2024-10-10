@@ -14,7 +14,7 @@ contract PssSecp256k1 is IPssVerifier {
     uint256 public constant PP =
         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
     
-    bytes13 public constant DSI = "ECC-KECCAK256";
+    bytes13 public constant DSI = "ECC-SECP256K1";
     
     struct GroupManagerPublicKey {
         uint256 pk_m_x;
