@@ -138,12 +138,13 @@ fn generate_keys_ecc<C: PssCompatibleEccCurve>(algorithm: &Algorithm, sectors: u
 }
 
 fn point_to_hex_str(point_repr: &[u8]) -> (String, String) {
-    assert!(
-        point_repr.len() % 2 != 0,
+    assert_ne!(
+        point_repr.len() % 2,
+        0,
         "Point must have an even length plus the sec1 prefix"
     );
-    assert!(
-        point_repr[0] == 4,
+    assert_eq!(
+        point_repr[0], 4,
         "first byte must be 0x04 to indicate an uncompressed representation"
     );
     let point_repr = &point_repr[1..];
