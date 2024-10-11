@@ -1,7 +1,7 @@
 use crate::ecc::{Point, PssCompatibleEccCurve, Scalar, SerializationError};
 use rand_core::CryptoRngCore;
 use std::ops::{Add, Mul, Sub};
-use substrate_bn::{Fq, Fr, Group, G1};
+use substrate_bn::{AffineG1, Fq, Fr, Group, G1};
 
 #[derive(Clone, PartialEq)]
 pub struct BnPoint(G1);
@@ -42,15 +42,13 @@ impl TryFrom<Box<[u8]>> for BnPoint {
     type Error = SerializationError;
 
     fn try_from(value: Box<[u8]>) -> Result<Self, Self::Error> {
-        if value.get(0).ok_or(SerializationError)? % 2 != 0x04 {
+        if *value.get(0).ok_or(SerializationError)? != 0x04 {
             return Err(SerializationError);
         }
-        let x = Fq::from_slice(&value[1..33]).map_err(|_| SerializationError)?;
-        let y = Fq::from_slice(&value[33..]).map_err(|_| SerializationError)?;
-        let mut point = G1::zero();
-        point.set_x(x);
-        point.set_y(y);
-        point.set_z(Fq::one());
+        let point = AffineG1::new(
+            Fq::from_slice(&value[1..33]).map_err(|_| SerializationError)?,
+            Fq::from_slice(&value[33..]).map_err(|_| SerializationError)?,
+        ).map_err(|_| SerializationError)?.into();
         Ok(BnPoint(point))
     }
 }
@@ -118,7 +116,8 @@ impl PssCompatibleEccCurve for PssAltBn128 {
 
 #[cfg(test)]
 mod tests {
-    use crate::altbn::PssAltBn128;
+    use rand_core::OsRng;
+    use crate::altbn::{BnPoint, PssAltBn128};
     use crate::ecc::{Point, PssCompatibleEccCurve};
     use substrate_bn::Fq;
 
@@ -145,6 +144,15 @@ mod tests {
             0, 0, 0, 0, 0, 0, 2,
         ];
         assert_eq!(serialized.as_ref(), expected);
+    }
+
+    #[test]
+    fn serializaion() {
+        let point = BnPoint::random(&mut OsRng::default());
+        let serialized: Box<[u8]> = point.into();
+        let deserialized: BnPoint = serialized.clone().try_into().unwrap();
+        let serialized2: Box<[u8]> = deserialized.into();
+        assert_eq!(serialized, serialized2);
     }
 
     #[test]

@@ -7,9 +7,11 @@ use pss_rs::{
 };
 
 use crate::Algorithm;
-use pss_rs::altbn::PssAltBn128;
 use pss_rs::ecc::PssCompatibleEccCurve;
 use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "altbn")]
+use pss_rs::altbn::PssAltBn128;
 
 #[cfg(feature = "dh")]
 mod dh {
@@ -388,13 +390,9 @@ impl JsIccSecretKey {
                 panic!("Library compiled without support for DH")
             }
             #[cfg(feature = "altbn")]
-            Algorithm::AltBn128 => self.sign_ecc::<PssAltBn128>(
-                gpk,
-                sector,
-                use_identifier1,
-                use_identifier2,
-                message,
-            ),
+            Algorithm::AltBn128 => {
+                self.sign_ecc::<PssAltBn128>(gpk, sector, use_identifier1, use_identifier2, message)
+            }
             #[cfg(not(feature = "altbn"))]
             Algorithm::AltBn128 => {
                 panic!("Library compiled without support for alt_bn128")
