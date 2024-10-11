@@ -76,22 +76,21 @@ contract PssSecp256k1 is IPssVerifier {
         );
     }
 
-    function validate_signature_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x) public view override returns (bool) {
-        return uint256(keccak256(recover_hash_input_p1(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x))) % PP == c;
+    function validate_signature_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_1) public view override returns (bool) {
+        return uint256(keccak256(recover_hash_input_p1(message, c, s1, s2, i_sector_icc_1))) % PP == c;
     }
 
-    function recover_hash_input_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x) public view returns (bytes memory) {
+    function recover_hash_input_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_1) public view returns (bytes memory) {
         (uint256 q1_x, uint256 q1_y) = calc_q1(c, s1, s2);
-        uint256 i_sector_icc_1_y = EllipticCurve.deriveY(i_sector_icc_1_parity, i_sector_icc_1_x, AA, BB, PP);
-        (uint256 a1_x, uint256 a1_y) = calc_a(i_sector_icc_1_x, i_sector_icc_1_y, c, s1);
+        (uint256 a1_x, uint256 a1_y) = calc_a(i_sector_icc_1.X, i_sector_icc_1.Y, c, s1);
         // Q || I_sector_icc_1 || A1 || PK_Sector || ID_DSI || m
         return abi.encodePacked(
                 uint8(4),
                 q1_x,
                 q1_y,
                 uint8(4),
-                i_sector_icc_1_x,
-                i_sector_icc_1_y,
+                i_sector_icc_1.X,
+                i_sector_icc_1.Y,
                 uint8(4),
                 a1_x,
                 a1_y,
@@ -103,30 +102,28 @@ contract PssSecp256k1 is IPssVerifier {
         );
     }
 
-    function validate_signature_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view override returns (bool) {
-        return uint256(keccak256(recover_hash_input_p1_p2(message, c, s1, s2, i_sector_icc_1_parity, i_sector_icc_1_x, i_sector_icc_2_parity, i_sector_icc_2_x))) % PP == c;
+    function validate_signature_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_1, ECC.Point memory i_sector_icc_2) public view override returns (bool) {
+        return uint256(keccak256(recover_hash_input_p1_p2(message, c, s1, s2, i_sector_icc_1, i_sector_icc_2))) % PP == c;
     }
 
-    function recover_hash_input_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_1_parity, uint256 i_sector_icc_1_x, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bytes memory) {
+    function recover_hash_input_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_1, ECC.Point memory i_sector_icc_2) public view returns (bytes memory) {
         (uint256 q1_x, uint256 q1_y) = calc_q1(c, s1, s2);
-        uint256 i_sector_icc_1_y = EllipticCurve.deriveY(i_sector_icc_1_parity, i_sector_icc_1_x, AA, BB, PP);
-        (uint256 a1_x, uint256 a1_y) = calc_a(i_sector_icc_1_x, i_sector_icc_1_y, c, s1);
-        uint256 i_sector_icc_2_y = EllipticCurve.deriveY(i_sector_icc_2_parity, i_sector_icc_2_x, AA, BB, PP);
-        (uint256 a2_x, uint256 a2_y) = calc_a(i_sector_icc_2_x, i_sector_icc_2_y, c, s2);
+        (uint256 a1_x, uint256 a1_y) = calc_a(i_sector_icc_1.X, i_sector_icc_1.Y, c, s1);
+        (uint256 a2_x, uint256 a2_y) = calc_a(i_sector_icc_2.X, i_sector_icc_2.Y, c, s2);
         // Q || I_sector_icc_1 || A1 || I_sector_icc_2 || A2 || PK_Sector || ID_DSI || m
         return abi.encodePacked(
                 uint8(4),
                 q1_x,
                 q1_y,
                 uint8(4),
-                i_sector_icc_1_x,
-                i_sector_icc_1_y,
+                i_sector_icc_1.X,
+                i_sector_icc_1.Y,
                 uint8(4),
                 a1_x,
                 a1_y,
                 uint8(4),
-                i_sector_icc_2_x,
-                i_sector_icc_2_y,
+                i_sector_icc_1.X,
+                i_sector_icc_1.Y,
                 uint8(4),
                 a2_x,
                 a2_y,
@@ -138,22 +135,21 @@ contract PssSecp256k1 is IPssVerifier {
         );
     }
 
-    function validate_signature_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view override returns (bool) {
-        return uint256(keccak256(recover_hash_input_p2(message, c, s1, s2, i_sector_icc_2_parity, i_sector_icc_2_x))) % PP == c;
+    function validate_signature_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_2) public view override returns (bool) {
+        return uint256(keccak256(recover_hash_input_p2(message, c, s1, s2, i_sector_icc_2))) % PP == c;
     }
 
-    function recover_hash_input_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, uint8 i_sector_icc_2_parity, uint256 i_sector_icc_2_x) public view returns (bytes memory) {
+    function recover_hash_input_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_2) public view returns (bytes memory) {
         (uint256 q1_x, uint256 q1_y) = calc_q1(c, s1, s2);
-        uint256 i_sector_icc_2_y = EllipticCurve.deriveY(i_sector_icc_2_parity, i_sector_icc_2_x, AA, BB, PP);
-        (uint256 a2_x, uint256 a2_y) = calc_a(i_sector_icc_2_x, i_sector_icc_2_y, c, s2);
+        (uint256 a2_x, uint256 a2_y) = calc_a(i_sector_icc_2.X, i_sector_icc_2.Y, c, s2);
         // Q || I_sector_icc_2 || A2 || PK_Sector || ID_DSI || m
         return abi.encodePacked(
                 uint8(4),
                 q1_x,
                 q1_y,
                 uint8(4),
-                i_sector_icc_2_x,
-                i_sector_icc_2_y,
+                i_sector_icc_2.X,
+                i_sector_icc_2.Y,
                 uint8(4),
                 a2_x,
                 a2_y,

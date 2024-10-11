@@ -32,7 +32,7 @@
 
 // 2019 OKIMS
 
-pragma solidity ^0.7.0;
+pragma solidity ^0.8.0;
 import "./Altbn128.sol";
 
 library Pairing {
@@ -48,8 +48,6 @@ library Pairing {
         uint256[2] X;
         uint256[2] Y;
     }
-
-    G1Point public constant G1_BASE = G1Point(1, 2);
 
     /*
      * @return The negation of p, i.e. p.plus(p.negate()) should be zero.
@@ -151,5 +149,9 @@ library Pairing {
         require(success, "pairing-opcode-failed");
 
         return out[0] != 0;
+    }
+
+    function base() public pure returns (G1Point memory) {
+        return G1Point(1, 2);
     }
 }
