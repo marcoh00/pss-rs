@@ -27,10 +27,10 @@ contract PssSecp256k1 is IPssVerifier {
     uint256 public pk_sector_x;
     uint256 public pk_sector_y;
 
-    constructor(GroupManagerPublicKey memory _gpk, uint256 _pk_sector_x, uint256 _pk_sector_y) {
-        gpk = _gpk;
-        pk_sector_x = _pk_sector_x;
-        pk_sector_y = _pk_sector_y;
+    constructor(ECC.Point memory pk_m, ECC.Point memory pk_icc, ECC.Point memory _pk_sector) {
+        gpk = GroupManagerPublicKey(pk_m.X, pk_m.Y, pk_icc.X, pk_icc.Y);
+        pk_sector_x = _pk_sector.X;
+        pk_sector_y = _pk_sector.Y;
     }
 
     function get_gpk() public view returns (uint256, uint256, uint256, uint256) {
@@ -122,8 +122,8 @@ contract PssSecp256k1 is IPssVerifier {
                 a1_x,
                 a1_y,
                 uint8(4),
-                i_sector_icc_1.X,
-                i_sector_icc_1.Y,
+                i_sector_icc_2.X,
+                i_sector_icc_2.Y,
                 uint8(4),
                 a2_x,
                 a2_y,
