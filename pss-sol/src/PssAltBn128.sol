@@ -4,7 +4,10 @@ pragma solidity ^0.8;
 import "./Altbn128.sol";
 import "./IPssVerifier.sol";
 
-contract PssAltbn128 is IPssVerifier {
+import {console} from "forge-std/console.sol";
+
+
+contract PssAltBn128 is IPssVerifier {
     bytes15 public constant DSI = "ECC-ALTBN128-G1";
     
     struct GroupManagerPublicKey {
@@ -15,9 +18,9 @@ contract PssAltbn128 is IPssVerifier {
     GroupManagerPublicKey public gpk;
     Pairing.G1Point public pk_sector;
 
-    constructor(GroupManagerPublicKey memory _gpk, Pairing.G1Point memory _pk_sector) {
-        gpk = _gpk;
-        pk_sector = _pk_sector;
+    constructor(ECC.Point memory pk_m, ECC.Point memory pk_icc, ECC.Point memory _pk_sector) {
+        gpk = GroupManagerPublicKey(Pairing.G1Point(pk_m.X, pk_m.Y), Pairing.G1Point(pk_icc.X, pk_icc.Y));
+        pk_sector = Pairing.G1Point(_pk_sector.X, _pk_sector.Y);
     }
 
     function get_gpk() public view returns (uint256, uint256, uint256, uint256) {
@@ -30,10 +33,47 @@ contract PssAltbn128 is IPssVerifier {
 
     function calc_q1(uint256 c, uint256 s1, uint256 s2) private view returns (Pairing.G1Point memory) {
         Pairing.G1Point memory q1s1 = Pairing.scalar_mul(gpk.pk_icc, c);
+
+        console.log("c");
+        console.logBytes(abi.encodePacked(c));
+
+        console.log("pkicc X");
+        console.logBytes(abi.encodePacked(gpk.pk_icc.X));
+
+        console.log("pkicc Y");
+        console.logBytes(abi.encodePacked(gpk.pk_icc.Y));
+
+        console.log("q1s1 X");
+        console.logBytes(abi.encodePacked(q1s1.X));
+
+        console.log("q1s1 Y");
+        console.logBytes(abi.encodePacked(q1s1.Y));
+
         Pairing.G1Point memory q1s2 = Pairing.scalar_mul(Pairing.base(), s1);
+
+        console.log("q1s2 X");
+        console.logBytes(abi.encodePacked(q1s2.X));
+
+        console.log("s1");
+        console.logBytes(abi.encodePacked(s1));
+
         Pairing.G1Point memory q1s3 = Pairing.scalar_mul(gpk.pk_m, s2);
+
+        console.log("q1s3 X");
+        console.logBytes(abi.encodePacked(q1s3.X));
+
+        console.log("s2");
+        console.logBytes(abi.encodePacked(s2));
+
         Pairing.G1Point memory q1s4 = Pairing.plus(q1s1, q1s2);
-        return Pairing.plus(q1s3, q1s4);
+        console.log("q1s4 X");
+        console.logBytes(abi.encodePacked(q1s4.X));
+
+        Pairing.G1Point memory q1 = Pairing.plus(q1s3, q1s4);
+
+        console.log("q1 X");
+        console.logBytes(abi.encodePacked(q1.X));
+        return q1;
     }
 
     function calc_a(Pairing.G1Point memory public_key, uint256 c, uint256 s) private view returns (Pairing.G1Point memory) {
@@ -43,7 +83,33 @@ contract PssAltbn128 is IPssVerifier {
     }
 
     function validate_signature(bytes calldata message, uint256 c, uint256 s1, uint256 s2) public view override returns (bool) {
-        return uint256(keccak256(recover_hash_input(message, c, s1, s2))) % Pairing.PRIME_Q == c;
+        console.log("validateSignature c");
+        console.logBytes(abi.encodePacked(c));
+
+        bytes memory hash_input = recover_hash_input(message, c, s1, s2);
+        console.log("Hash Input:");
+        console.logBytes(hash_input);
+
+        bytes memory hashed = abi.encodePacked(keccak256(hash_input));
+        console.log("Hashed:");
+        console.logBytes(hashed);
+        hashed[0] &= 0x1F;
+
+        console.log("Hashed and shortened:");
+        console.logBytes(hashed);
+
+        uint256 asnum = uint256(bytes32(hashed));
+        console.log("As number:");
+        console.logUint(asnum);
+
+        uint256 withmod = asnum % Pairing.PRIME_Q;
+        console.log("ModN:");
+        console.logUint(withmod);
+
+        console.log("== c?");
+        console.logUint(c);
+        console.logBytes(abi.encodePacked(c));
+        return withmod == c;
     }
 
     function recover_hash_input(bytes calldata message, uint256 c, uint256 s1, uint256 s2) public view returns (bytes memory) {
@@ -62,7 +128,9 @@ contract PssAltbn128 is IPssVerifier {
     }
 
     function validate_signature_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_1) public view override returns (bool) {
-        return uint256(keccak256(recover_hash_input_p1(message, c, s1, s2, Pairing.G1Point(i_sector_icc_1.X, i_sector_icc_1.Y)))) % Pairing.PRIME_Q == c;
+        bytes memory hashed = abi.encodePacked(keccak256(recover_hash_input_p1(message, c, s1, s2, Pairing.G1Point(i_sector_icc_1.X, i_sector_icc_1.Y))));
+        hashed[0] &= 0x1F;
+        return uint256(bytes32(hashed)) % Pairing.PRIME_Q == c;
     }
 
     function recover_hash_input_p1(bytes calldata message, uint256 c, uint256 s1, uint256 s2, Pairing.G1Point memory i_sector_icc_1) public view returns (bytes memory) {
@@ -88,7 +156,9 @@ contract PssAltbn128 is IPssVerifier {
     }
 
     function validate_signature_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_1, ECC.Point memory i_sector_icc_2) public view override returns (bool) {
-        return uint256(keccak256(recover_hash_input_p1_p2(message, c, s1, s2, Pairing.G1Point(i_sector_icc_1.X, i_sector_icc_1.Y), Pairing.G1Point(i_sector_icc_2.X, i_sector_icc_2.Y)))) % Pairing.PRIME_Q == c;
+        bytes memory hashed = abi.encodePacked(keccak256(recover_hash_input_p1_p2(message, c, s1, s2, Pairing.G1Point(i_sector_icc_1.X, i_sector_icc_1.Y), Pairing.G1Point(i_sector_icc_2.X, i_sector_icc_2.Y))));
+        hashed[0] &= 0x1F;
+        return uint256(bytes32(hashed)) % Pairing.PRIME_Q == c;
     }
 
     function recover_hash_input_p1_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, Pairing.G1Point memory i_sector_icc_1, Pairing.G1Point memory i_sector_icc_2) public view returns (bytes memory) {
@@ -121,7 +191,9 @@ contract PssAltbn128 is IPssVerifier {
     }
 
     function validate_signature_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, ECC.Point memory i_sector_icc_2) public view override returns (bool) {
-        return uint256(keccak256(recover_hash_input_p2(message, c, s1, s2, Pairing.G1Point(i_sector_icc_2.X, i_sector_icc_2.Y)))) % Pairing.PRIME_Q == c;
+        bytes memory hashed = abi.encodePacked(keccak256(recover_hash_input_p2(message, c, s1, s2, Pairing.G1Point(i_sector_icc_2.X, i_sector_icc_2.Y))));
+        hashed[0] &= 0x1F;
+        return uint256(bytes32(hashed)) % Pairing.PRIME_Q == c;
     }
 
     function recover_hash_input_p2(bytes calldata message, uint256 c, uint256 s1, uint256 s2, Pairing.G1Point memory i_sector_icc_2) public view returns (bytes memory) {

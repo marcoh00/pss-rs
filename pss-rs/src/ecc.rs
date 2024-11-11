@@ -78,8 +78,8 @@ fn signature_hash<C: PssCompatibleEccCurve, D: Digest>(
 }
 
 pub struct SectorSpecificIdentifiers<C: PssCompatibleEccCurve> {
-    i_sector_icc_1: C::Point,
-    i_sector_icc_2: C::Point,
+    pub(crate) i_sector_icc_1: C::Point,
+    pub(crate) i_sector_icc_2: C::Point,
 }
 
 impl<C: PssCompatibleEccCurve> SectorSpecificIdentifiers<C> {
@@ -459,7 +459,6 @@ impl<C: PssCompatibleEccCurve> EccGroupManagerPublicKey<C> {
         signature: &EccPssSignature<C>,
     ) -> C::Scalar {
         let q1s1 = self.pk_icc.mul(&signature.c);
-        //let q1s2 = SecretKey::new(signature.s1.into::<ScalarPrimitive<C>>()).public_key().to_projective();
         let q1s2 = signature.s1.to_point();
         let q1s3 = self.pk_m.mul(&signature.s2);
         let q1 = q1s1.add(&q1s2).add(&q1s3);
