@@ -7,7 +7,6 @@ use pss_rs::{
 };
 use rand_core::{OsRng, RngCore};
 use serde::Serialize;
-use std::process::Output;
 use std::{fs::File, path::PathBuf};
 
 #[cfg(feature = "altbn")]
@@ -240,7 +239,7 @@ fn generate_eth_testcase<C: PssCompatibleEccCurve>(
     sector_number: u16,
 ) -> impl Iterator<Item = String> {
     let mut test_cases = Vec::new();
-    let mut icc = gpk.new_icc();
+    let icc = gpk.new_icc();
     for comb in 0..4 {
         // TODO REMOVE
         println!("----------------- COMB {:02} ------------------", comb);
